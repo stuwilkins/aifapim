@@ -1,0 +1,238 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Azure OpenAI v1 (Patched)",
+    "version": "1.0.0",
+    "description": "Minimal OpenAPI spec including /openai/v1/responses for Azure OpenAI"
+  },
+  "servers": [
+    {
+      "url": "https://YOUR-RESOURCE-NAME.openai.azure.com"
+    }
+  ],
+  "paths": {
+    "/v1/responses": {
+      "post": {
+        "operationId": "createResponse",
+        "summary": "Create a response (messages API)",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateResponseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateResponseResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "operationId": "listModels",
+        "summary": "List available models",
+        "description": "Lists the currently available model deployments and provides basic information about each one.",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListModelsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/models/{model}": {
+      "get": {
+        "operationId": "retrieveModel",
+        "summary": "Retrieve a model",
+        "description": "Retrieves a model deployment, providing basic information.",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model",
+            "in": "path",
+            "required": true,
+            "description": "The ID of the model deployment.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Model"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "api-key"
+      }
+    },
+    "schemas": {
+      "CreateResponseRequest": {
+        "type": "object",
+        "required": ["model", "input"],
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "Deployment name in Azure"
+          },
+          "input": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            }
+          },
+          "max_output_tokens": {
+            "type": "integer"
+          }
+        }
+      },
+      "Message": {
+        "type": "object",
+        "required": ["role", "content"],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": ["system", "user", "assistant"]
+          },
+          "content": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContentItem"
+            }
+          }
+        }
+      },
+      "ContentItem": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["text"]
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateResponseResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "output": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OutputItem"
+            }
+          }
+        }
+      },
+      "OutputItem": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OutputContent"
+            }
+          }
+        }
+      },
+      "OutputContent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["output_text"]
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "Model": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The model deployment identifier."
+          },
+          "object": {
+            "type": "string",
+            "enum": ["model"]
+          },
+          "created": {
+            "type": "integer",
+            "description": "Unix epoch seconds at which the model was created."
+          },
+          "owned_by": {
+            "type": "string"
+          }
+        }
+      },
+      "ListModelsResponse": {
+        "type": "object",
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": ["list"]
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Model"
+            }
+          }
+        }
+      }
+    }
+  }
+}

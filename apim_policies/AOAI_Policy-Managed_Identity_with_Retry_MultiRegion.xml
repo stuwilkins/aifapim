@@ -1,0 +1,45 @@
+<policies>
+    <inbound>
+        <set-backend-service backend-id="aoai-primary-backend" />
+        <!-- The ip-filter allow-list below is substituted at deploy time by
+             aifapim.bicep from the allowedClientIps parameter (see aifapim.bicepparam). -->
+        <ip-filter action="allow">
+              __ALLOWED_CLIENT_IPS__
+        </ip-filter>
+        <base />
+        <!-- Extract the deployment ID from the URL path after '/deployments/' -->
+        <set-variable name="deploymentId" value="@(context.Request.Url.Path.Split('/').ElementAtOrDefault(1))" />
+        <!-- Emit token metrics with the deployment ID as a dimension -->
+        <azure-openai-token-limit tokens-per-minute="10000000" counter-key="@(context.Subscription.Id)" estimate-prompt-tokens="true" tokens-consumed-header-name="consumed-tokens" remaining-tokens-header-name="remaining-tokens" />
+        <azure-openai-emit-token-metric>
+            <dimension name="API ID" />
+            <dimension name="Subscription ID" />
+            <dimension name="Subscription Name" value="@(context.Subscription.Name)" />
+            <dimension name="User ID" />
+            <dimension name="Product ID" />
+            <!-- Model dimension: AOAI clients pass the deployment name in the URL
+                 path segment after /deployments/. The deploymentId variable is
+                 set above. -->
+            <dimension name="Model" value="@((string)context.Variables.GetValueOrDefault(&quot;deploymentId&quot;, &quot;&quot;))" />
+            <dimension name="X-Forwarded-For" value="@(context.Request.Headers.GetValueOrDefault(&quot;X-Forwarded-For&quot;, context.Request.IpAddress))" />
+        </azure-openai-emit-token-metric>
+        <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+    </inbound>
+    <backend>
+        <retry condition="@(context.Response.StatusCode == 404 || context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)" count="5" interval="1" delta="1" max-interval="8" first-fast-retry="false">
+            <!-- Failover logic below - uncomment to retry on secondary backend -->
+            <choose>
+                <when condition="@(context.Response.StatusCode == 404 || context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)">
+                    <set-backend-service backend-id="aoai-secondary-backend" />
+                </when>
+            </choose>
+            <forward-request buffer-request-body="true" timeout="__BACKEND_TIMEOUT__" />
+        </retry>
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

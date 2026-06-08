@@ -1,0 +1,110 @@
+<policies>
+    <inbound>
+        <set-backend-service backend-id="anthropic-primary-backend" />
+        <!-- The ip-filter allow-list below is substituted at deploy time by
+             aifapim.bicep from the allowedClientIps parameter (see aifapim.bicepparam). -->
+        <ip-filter action="allow">
+              __ALLOWED_CLIENT_IPS__
+        </ip-filter>
+        <base />
+        <!-- Extract the model name from the JSON request body. preserveContent=true
+             keeps the body intact for the upstream call. Used as the Model dimension
+             on the token metric below. -->
+        <set-variable name="requestModel" value="@{
+            try {
+                var body = context.Request.Body.As&lt;JObject&gt;(preserveContent: true);
+                return (string)body[&quot;model&quot;] ?? &quot;&quot;;
+            } catch {
+                return &quot;&quot;;
+            }
+        }" />
+        <!-- Capture whether the client requested streaming. SSE-streamed responses
+             cannot be parsed as a JObject in <outbound>, so the response-body token
+             extraction below is skipped for streaming requests. Anthropic defaults
+             to non-streaming when 'stream' is absent. -->
+        <set-variable name="requestIsStream" value="@{
+            try {
+                var body = context.Request.Body.As&lt;JObject&gt;(preserveContent: true);
+                return body[&quot;stream&quot;]?.Value&lt;bool&gt;() == true ? &quot;true&quot; : &quot;false&quot;;
+            } catch {
+                return &quot;false&quot;;
+            }
+        }" />
+        <llm-token-limit tokens-per-minute="10000000" counter-key="@(context.Subscription.Id)" estimate-prompt-tokens="true" tokens-consumed-header-name="consumed-tokens" remaining-tokens-header-name="remaining-tokens" />
+        <!-- Emit token metrics with explicit dimensions under the APIM
+             custom-metric namespace (substituted at deploy time by aifapim.bicep
+             from the apimProductName parameter). This policy attaches dimensions
+             (Model, Subscription, etc.) to APIM's auto-emitted
+             Prompt/Completion/Total Tokens family.
+             Note: for Anthropic, only Prompt Tokens emits non-zero; the auto-emit
+             Completion Tokens is always 0 because APIM's classic-tier diagnostic
+             does not parse usage.output_tokens from Anthropic responses. The
+             <outbound> <emit-metric> block below compensates by emitting
+             "Anthropic Completion Tokens" explicitly for non-streaming responses.
+             The Model dimension is captured here in <inbound> because it is
+             missing from the ApiManagementGatewayLlmLog.ModelName column for
+             streaming Anthropic responses on classic-tier APIM. -->
+        <llm-emit-token-metric namespace="__METRIC_NAMESPACE__">
+            <dimension name="API ID" />
+            <dimension name="Subscription ID" />
+            <dimension name="Subscription Name" value="@(context.Subscription.Name)" />
+            <dimension name="User ID" />
+            <dimension name="Product ID" />
+            <dimension name="Model" value="@((string)context.Variables.GetValueOrDefault(&quot;requestModel&quot;, &quot;&quot;))" />
+            <dimension name="X-Forwarded-For" value="@(context.Request.Headers.GetValueOrDefault(&quot;X-Forwarded-For&quot;, context.Request.IpAddress))" />
+        </llm-emit-token-metric>
+        <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+    </inbound>
+    <backend>
+        <retry condition="@(context.Response.StatusCode == 404 || context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)" count="5" interval="1" delta="1" max-interval="8" first-fast-retry="false">
+            <choose>
+                <when condition="@(context.Response.StatusCode == 404 || context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)">
+                    <set-backend-service backend-id="anthropic-secondary-backend" />
+                </when>
+            </choose>
+            <forward-request buffer-request-body="true" timeout="__BACKEND_TIMEOUT__" />
+        </retry>
+    </backend>
+    <outbound>
+        <base />
+        <!-- For NON-streaming Anthropic responses, extract usage.output_tokens from
+             the response body and emit it as the "Anthropic Completion Tokens"
+             custom metric. APIM's classic-tier LLM diagnostic does not extract
+             token counts from Anthropic Messages API responses: the "Completion
+             Tokens" value in AppMetrics and the CompletionTokens column in
+             ApiManagementGatewayLlmLog are both 0 for Anthropic regardless of
+             whether the response is streamed. STREAMING Anthropic responses
+             cannot be parsed in <outbound> via context.Response.Body.As<JObject>()
+             because the body is an SSE event stream, not a single JSON object;
+             the emit below is gated on the stream flag captured in <inbound>.
+             Streaming Anthropic completion tokens therefore remain unmeasurable
+             on this APIM tier (documented in AGENTS.md / README.md). -->
+        <choose>
+            <when condition="@(context.Response.StatusCode == 200 &amp;&amp; (string)context.Variables.GetValueOrDefault(&quot;requestIsStream&quot;, &quot;false&quot;) == &quot;false&quot;)">
+                <set-variable name="anthropicResponseBody" value="@{
+                    try {
+                        return context.Response.Body.As&lt;JObject&gt;(preserveContent: true);
+                    } catch {
+                        return null;
+                    }
+                }" />
+                <set-variable name="anthropicCompletionTokens" value="@{
+                    var body = (JObject)context.Variables.GetValueOrDefault(&quot;anthropicResponseBody&quot;);
+                    return body?[&quot;usage&quot;]?[&quot;output_tokens&quot;]?.Value&lt;double&gt;() ?? 0.0;
+                }" />
+                <emit-metric name="Anthropic Completion Tokens" value="@((double)context.Variables[&quot;anthropicCompletionTokens&quot;])" namespace="__METRIC_NAMESPACE__">
+                    <dimension name="API ID" />
+                    <dimension name="Subscription ID" />
+                    <dimension name="Subscription Name" value="@(context.Subscription.Name)" />
+                    <dimension name="User ID" />
+                    <dimension name="Product ID" />
+                    <dimension name="Model" value="@((string)context.Variables.GetValueOrDefault(&quot;requestModel&quot;, &quot;&quot;))" />
+                    <dimension name="X-Forwarded-For" value="@(context.Request.Headers.GetValueOrDefault(&quot;X-Forwarded-For&quot;, context.Request.IpAddress))" />
+                </emit-metric>
+            </when>
+        </choose>
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

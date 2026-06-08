@@ -1,0 +1,52 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled",
+  "autoupdate": false,
+  "permission": {
+    "read":  { "*": "allow", "/**": "ask", "~/**": "ask" },
+    "edit":  { "*": "allow", "/**": "ask", "~/**": "ask" },
+    "glob":  { "*": "allow", "/**": "ask", "~/**": "ask" },
+    "grep":  { "*": "allow", "/**": "ask", "~/**": "ask" },
+    "bash": "ask",
+    "task": "ask",
+    "skill": "ask",
+    "lsp": "ask",
+    "question": "ask",
+    "webfetch": "ask",
+    "websearch": "ask",
+    "external_directory": "ask",
+    "doom_loop": "ask"
+  },
+  "provider": {
+    "aifapim-openapi": {
+      "npm": "@ai-sdk/openai",
+      "name": "AIFAPIM OpenAPI",
+      "options": {
+        "baseURL": "https://{env:AIFAPIM_HOST}/openai/v1",
+        "apiKey": "dummy",
+        "headers": {
+          "x-api-key": "{env:AIFAPIM_API_KEY}"
+        }
+      },
+      "models": {
+        "gpt-4.1": { "name": "GPT-4.1" },
+        "gpt-4.1-mini": { "name": "GPT-4.1 Mini" }
+      }
+    },
+    "aifapim-anthropic": {
+      "npm": "@ai-sdk/anthropic",
+      "name": "AIFAPIM Anthropic",
+      "options": {
+        "baseURL": "https://{env:AIFAPIM_HOST}/anthropic/v1",
+        "apiKey": "dummy",
+        "headers": {
+          "x-api-key": "{env:AIFAPIM_API_KEY}"
+        }
+      },
+      "models": {
+        "claude-sonnet-4-5": { "name": "Claude Sonnet 4.5" },
+        "claude-haiku-4-5": { "name": "Claude Haiku 4.5" }
+      }
+    }
+  }
+}

@@ -1,0 +1,39 @@
+
+# Azure Functions artifacts
+bin
+obj
+appsettings.json
+local.settings.json
+private
+
+# Azurite artifacts
+__blobstorage__
+__queuestorage__
+__azurite_db*__.json
+
+# Bicep build output
+aifapim.json
+aifapim.example.json
+llm-token-usage-workbook.json
+
+# Logs and editor/tool caches
+tmux-*.log
+*.log
+.opencode/
+.mypy_cache/
+
+# Environment-specific parameter files — copy from aifapim.example.bicepparam,
+# fill in real values, and keep them out of the public repo. The committed
+# template is whitelisted below.
+aifapim.bicepparam
+aifapim-dev.bicepparam
+aifapim-*.bicepparam
+!aifapim.example.bicepparam
+
+# Out-of-tree subscription-key tooling kept locally for personal use
+apim-subscription-keys.sh
+apim-subscriptions.bicep
+
+# CA certificate PEMs are user-supplied; directory is kept via .gitkeep.
+resources/*
+!resources/.gitkeep
