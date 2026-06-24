@@ -52,6 +52,20 @@ resource parentAPIM 'Microsoft.ApiManagement/service@2023-03-01-preview' existin
   name: apimName
 }
 
+// --- ServiceLocked race mitigation ---
+//
+// On Developer SKU (single instance) parallel child-resource writes against a
+// transitioning APIM service produce `ServiceLocked: The API Service is
+// transitioning at this time`. To make deploys deterministic on classic-tier
+// APIM, every backend / API / policy / diagnostic / product / product-api
+// resource below is chained via `dependsOn` so they land sequentially rather
+// than fan-out in parallel. The chain order is documented inline at each
+// resource. Do NOT remove the `dependsOn` edges without a replacement
+// serialization strategy — they look redundant under `parent:` but are not:
+// `parent:` is a referential edge, `dependsOn:` is what ARM uses to serialize
+// the actual control-plane operations. See aifapim AGENTS.md "Developer SKU
+// ServiceLocked race".
+
 resource primarybackend 'Microsoft.ApiManagement/service/backends@2023-03-01-preview' = {
   name: 'aoai-primary-backend'
   parent: parentAPIM
@@ -65,6 +79,7 @@ resource primarybackend 'Microsoft.ApiManagement/service/backends@2023-03-01-pre
 resource secondarybackend 'Microsoft.ApiManagement/service/backends@2023-03-01-preview' = {
   name: 'aoai-secondary-backend'
   parent: parentAPIM
+  dependsOn: [primarybackend]
   properties: {
     description: 'Secondary AOAI endpoint'
     protocol: 'http'
@@ -75,6 +90,7 @@ resource secondarybackend 'Microsoft.ApiManagement/service/backends@2023-03-01-p
 resource openaiV1MessagesPrimaryBackend 'Microsoft.ApiManagement/service/backends@2023-03-01-preview' = {
   name: 'aoai-v1-messages-primary-backend'
   parent: parentAPIM
+  dependsOn: [secondarybackend]
   properties: {
     description: 'Primary AOAI v1 Messages endpoint'
     protocol: 'http'
@@ -85,6 +101,7 @@ resource openaiV1MessagesPrimaryBackend 'Microsoft.ApiManagement/service/backend
 resource openaiV1MessagesSecondaryBackend 'Microsoft.ApiManagement/service/backends@2023-03-01-preview' = {
   name: 'aoai-v1-messages-secondary-backend'
   parent: parentAPIM
+  dependsOn: [openaiV1MessagesPrimaryBackend]
   properties: {
     description: 'Secondary AOAI v1 Messages endpoint'
     protocol: 'http'
@@ -95,6 +112,7 @@ resource openaiV1MessagesSecondaryBackend 'Microsoft.ApiManagement/service/backe
 resource anthropicPrimaryBackend 'Microsoft.ApiManagement/service/backends@2023-03-01-preview' = {
   name: 'anthropic-primary-backend'
   parent: parentAPIM
+  dependsOn: [openaiV1MessagesSecondaryBackend]
   properties: {
     description: 'Primary Anthropic endpoint'
     protocol: 'http'
@@ -105,6 +123,7 @@ resource anthropicPrimaryBackend 'Microsoft.ApiManagement/service/backends@2023-
 resource anthropicSecondaryBackend 'Microsoft.ApiManagement/service/backends@2023-03-01-preview' = {
   name: 'anthropic-secondary-backend'
   parent: parentAPIM
+  dependsOn: [anthropicPrimaryBackend]
   properties: {
     description: 'Secondary Anthropic endpoint'
     protocol: 'http'
@@ -115,6 +134,7 @@ resource anthropicSecondaryBackend 'Microsoft.ApiManagement/service/backends@202
 resource api 'Microsoft.ApiManagement/service/apis@2023-03-01-preview' = {
   parent: parentAPIM
   name: apiName
+  dependsOn: [anthropicSecondaryBackend]
   properties: {
     displayName: openaiApiDisplayName
     format: 'openapi'
@@ -139,6 +159,7 @@ resource apiPolicy 'Microsoft.ApiManagement/service/apis/policies@2023-03-01-pre
 
 resource aoaiDiagnostic 'Microsoft.ApiManagement/service/apis/diagnostics@2024-06-01-preview' = {
   parent: api
+  dependsOn: [apiPolicy]
   name: 'applicationinsights'
   properties: {
     alwaysLog: 'allErrors'
@@ -180,7 +201,7 @@ resource aoaiDiagnostic 'Microsoft.ApiManagement/service/apis/diagnostics@2024-0
 
 resource diagnostic 'Microsoft.ApiManagement/service/diagnostics@2023-03-01-preview' = {
   parent: parentAPIM
-  dependsOn: [api]
+  dependsOn: [aoaiDiagnostic]
   name: 'applicationinsights'
   properties: {
     alwaysLog: 'allErrors'
@@ -229,7 +250,7 @@ resource diagnostic 'Microsoft.ApiManagement/service/diagnostics@2023-03-01-prev
 resource openaiV1MessagesApi 'Microsoft.ApiManagement/service/apis@2023-03-01-preview' = {
   parent: parentAPIM
   name: openaiV1MessagesApiName
-  dependsOn: [api]
+  dependsOn: [diagnostic]
   properties: {
     displayName: openaiV1MessagesApiDisplayName
     path: openaiV1MessagesApiPath
@@ -249,9 +270,15 @@ resource openaiV1MessagesApi 'Microsoft.ApiManagement/service/apis@2023-03-01-pr
 resource openaiV1MessagesApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2023-03-01-preview' = {
   parent: openaiV1MessagesApi
   name: 'policy'
+  // Backend deps are pre-existing referential requirements. The
+  // openaiV1MessagesApi dep is part of the explicit serialization chain
+  // (see header comment); the linter flags it as redundant under `parent:`
+  // but that conflates the two edge types — see header.
   dependsOn: [
     openaiV1MessagesPrimaryBackend
     openaiV1MessagesSecondaryBackend
+    #disable-next-line no-unnecessary-dependson
+    openaiV1MessagesApi
   ]
   properties: {
     format: 'xml'
@@ -261,6 +288,7 @@ resource openaiV1MessagesApiPolicy 'Microsoft.ApiManagement/service/apis/policie
 
 resource openaiV1MessagesDiagnostic 'Microsoft.ApiManagement/service/apis/diagnostics@2024-06-01-preview' = {
   parent: openaiV1MessagesApi
+  dependsOn: [openaiV1MessagesApiPolicy]
   name: 'applicationinsights'
   properties: {
     alwaysLog: 'allErrors'
@@ -305,6 +333,7 @@ resource openaiV1MessagesDiagnostic 'Microsoft.ApiManagement/service/apis/diagno
 resource anthropicApi 'Microsoft.ApiManagement/service/apis@2023-03-01-preview' = {
   parent: parentAPIM
   name: anthropicApiName
+  dependsOn: [openaiV1MessagesDiagnostic]
   properties: {
     displayName: anthropicApiDisplayName
     path: anthropicApiPath
@@ -332,6 +361,7 @@ resource anthropicApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2023-
 
 resource anthropicDiagnostic 'Microsoft.ApiManagement/service/apis/diagnostics@2024-06-01-preview' = {
   parent: anthropicApi
+  dependsOn: [anthropicApiPolicy]
   name: 'applicationinsights'
   properties: {
     alwaysLog: 'allErrors'
@@ -376,6 +406,7 @@ resource anthropicDiagnostic 'Microsoft.ApiManagement/service/apis/diagnostics@2
 resource apimProduct 'Microsoft.ApiManagement/service/products@2023-03-01-preview' = {
   parent: parentAPIM
   name: apimProductName
+  dependsOn: [anthropicDiagnostic]
   properties: {
     displayName: apimProductDisplayName
     description: apimProductDescription
@@ -393,9 +424,11 @@ resource apimProductOpenAiApi 'Microsoft.ApiManagement/service/products/apis@202
 resource apimProductAnthropicApi 'Microsoft.ApiManagement/service/products/apis@2023-03-01-preview' = {
   parent: apimProduct
   name: anthropicApi.name
+  dependsOn: [apimProductOpenAiApi]
 }
 
 resource apimProductOpenAiV1MessagesApi 'Microsoft.ApiManagement/service/products/apis@2023-03-01-preview' = {
   parent: apimProduct
   name: openaiV1MessagesApi.name
+  dependsOn: [apimProductAnthropicApi]
 }

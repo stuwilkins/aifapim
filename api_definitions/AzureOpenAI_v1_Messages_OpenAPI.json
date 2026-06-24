@@ -44,6 +44,40 @@
         }
       }
     },
+    "/v1/embeddings": {
+      "post": {
+        "operationId": "createEmbedding",
+        "summary": "Create embeddings",
+        "description": "Get a vector representation of a given input that can be consumed by machine learning models and algorithms.",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEmbeddingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateEmbeddingResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/models": {
       "get": {
         "operationId": "listModels",
@@ -195,6 +229,94 @@
           },
           "text": {
             "type": "string"
+          }
+        }
+      },
+      "CreateEmbeddingRequest": {
+        "type": "object",
+        "required": ["model", "input"],
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "Deployment name in Azure (e.g. text-embedding-3-large)."
+          },
+          "input": {
+            "description": "Input text to embed. Pass a string or an array of strings.",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "maxItems": 2048
+              }
+            ]
+          },
+          "dimensions": {
+            "type": "integer",
+            "description": "Number of dimensions for the output embedding. Supported on text-embedding-3 and later models only."
+          },
+          "encoding_format": {
+            "type": "string",
+            "enum": ["float", "base64"],
+            "description": "Format for the returned embeddings. Defaults to float."
+          },
+          "user": {
+            "type": "string",
+            "description": "Unique identifier representing the end-user."
+          }
+        }
+      },
+      "CreateEmbeddingResponse": {
+        "type": "object",
+        "required": ["object", "model", "data", "usage"],
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": ["list"]
+          },
+          "model": {
+            "type": "string",
+            "description": "The deployment name used for the embedding."
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["index", "object", "embedding"],
+              "properties": {
+                "index": {
+                  "type": "integer"
+                },
+                "object": {
+                  "type": "string",
+                  "enum": ["embedding"]
+                },
+                "embedding": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "description": "The embedding vector."
+                }
+              }
+            }
+          },
+          "usage": {
+            "type": "object",
+            "required": ["prompt_tokens", "total_tokens"],
+            "properties": {
+              "prompt_tokens": {
+                "type": "integer"
+              },
+              "total_tokens": {
+                "type": "integer"
+              }
+            }
           }
         }
       },

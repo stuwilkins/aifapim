@@ -137,6 +137,17 @@ resource apiManagementService 'Microsoft.ApiManagement/service@2023-03-01-previe
     hostnameConfigurations: hostnameConfigurations
     certificates: certificates
     developerPortalStatus: disableDeveloperPortal ? 'Disabled' : 'Enabled'
+    // Pin properties that ARM would otherwise force-modify on every deploy.
+    // On Developer SKU (single unit) any service-level mutation transitions
+    // the instance and races the child API/policy writes from api.bicep,
+    // producing `ServiceLocked: The API Service is transitioning at this
+    // time` on classic-tier deploys. Pin to the platform-default live values
+    // so the service write is a no-op. natGatewayState is intentionally NOT
+    // pinned: live value is the read-only `Unsupported` state on Developer
+    // SKU and supplying it as input risks rejection. See AGENTS.md
+    // "Developer SKU ServiceLocked race".
+    publicNetworkAccess: 'Enabled'
+    legacyPortalStatus: 'Disabled'
     customProperties: {
       'Microsoft.WindowsAzure.ApiManagement.Gateway.Protocols.Server.Http2': 'true'
     }

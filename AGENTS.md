@@ -132,6 +132,44 @@ curl -sS -o api_definitions/AzureOpenAI_inference_2024-10-21.yaml \
 
 Then re-apply the local `/models` and `/models/{model_id}` path additions (they are not in upstream) and redeploy. Diff against the previous version before committing to confirm no unexpected upstream operation changes.
 
+## Developer SKU ServiceLocked race
+
+On Developer SKU APIM (`apiManagementSku = 'Developer'`, single unit, no
+redundancy) every `az deployment group create` triggers a service-level
+mutation, and the single-instance service transitions while child writes
+land. With unserialized fan-out across the ~19 child resources in
+`modules/api.bicep` (backends, three APIs, three policies, three per-API
+diagnostics, service diagnostic, product, three product/api links), ARM
+deterministically fails the `api-management` nested deployment with
+`ServiceLocked: The API Service apim-<unique> is transitioning at this
+time`. The service itself is healthy (`provisioningState: Succeeded`)
+between attempts, so retrying without a fix loops forever.
+
+Two interventions in this repo prevent the race:
+
+1. **Service-level property pinning** in
+   `modules/api-management-private.bicep`. `publicNetworkAccess: 'Enabled'`
+   and `legacyPortalStatus: 'Disabled'` are set explicitly so ARM does not
+   force-mutate them on every deploy. They match the platform-default live
+   state on External-VNet Developer SKU. `natGatewayState` is intentionally
+   left omitted: its live value is the read-only `Unsupported` state on
+   Developer SKU and supplying it as input risks rejection. The residual
+   one-property service diff (if any) is absorbed by intervention #2.
+2. **Linear `dependsOn` serialization** in `modules/api.bicep`. Every child
+   resource is chained so backends → APIs → policies → diagnostics →
+   product → product/api links land sequentially, not in parallel. The
+   chain is documented inline at each resource. The edges look redundant
+   under `parent:` to the bicep linter — `parent:` is a referential edge,
+   `dependsOn:` is what ARM uses to order the actual control-plane writes.
+   Do NOT remove them without a replacement serialization strategy. The
+   one place this trips the linter (`openaiV1MessagesApiPolicy` depending
+   on its own parent API) carries an inline `#disable-next-line`.
+
+Tradeoff: deploys are slower (sequential child writes against a single
+APIM unit) in exchange for determinism. On Standard/Premium tiers with
+multi-unit redundancy this race does not occur and the chaining is a
+no-op cost-wise; the pinning is also harmless on those tiers.
+
 ## Token usage analytics quirks (verified on Developer SKU)
 
 - **Anthropic completion tokens are always 0 in BOTH `AppMetrics.Completion Tokens` AND `ApiManagementGatewayLlmLog.CompletionTokens`** — streaming and non-streaming alike. APIM's classic-tier LLM diagnostic does not parse `usage.output_tokens` from Anthropic Messages API responses. The Anthropic policy XML (`apim_policies/Anthropic_Policy-Managed_Identity_with_Retry_MultiRegion.xml`) compensates with an `<outbound>` `<emit-metric>` block that reads `usage.output_tokens` from the response body and emits an `Anthropic Completion Tokens` custom metric (namespace = the configured `apimProductName`).

@@ -126,6 +126,26 @@ def run_anthropic(deployment_name: str) -> None:
         render(content)
 
 
+def run_embedding_v1(deployment_name: str) -> None:
+    print(f"\n========== Embedding deployment: {deployment_name} ==========\n")
+
+    client = OpenAI(
+        base_url=f"{endpoint}/openai/v1/",
+        api_key="placeholder",
+        default_headers={"x-api-key": api_key},
+    )
+
+    response = client.embeddings.create(
+        model=deployment_name,
+        input="The National Synchrotron Light Source II produces some of the "
+              "brightest X-rays in the known universe.",
+    )
+
+    vector = response.data[0].embedding
+    print(f"model={response.model}  dimensions={len(vector)}  "
+          f"prompt_tokens={response.usage.prompt_tokens}")
+
+
 if __name__ == "__main__":
     # Test the Azure OpenAI GPT model through APIM.
     # Update these deployment names to match your environment's
@@ -140,3 +160,9 @@ if __name__ == "__main__":
 
     # Test the Meta Llama model (deployed via Azure AI Foundry) through APIM.
     run_chat("Llama-4-Maverick-17B-128E-Instruct-FP8")
+
+    # Test the Azure OpenAI embedding models through APIM (v1 path).
+    # Expects vector lengths: text-embedding-3-large=3072, others=1536.
+    run_embedding_v1("text-embedding-3-large")
+    run_embedding_v1("text-embedding-3-small")
+    run_embedding_v1("text-embedding-ada-002")
