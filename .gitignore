@@ -21,6 +21,7 @@ tmux-*.log
 *.log
 .opencode/
 .mypy_cache/
+.pixi/
 
 # Environment-specific parameter files — copy from aifapim.example.bicepparam,
 # fill in real values, and keep them out of the public repo. The committed
