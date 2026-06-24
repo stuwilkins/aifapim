@@ -1,10 +1,18 @@
 # This code is an example of how to use the Azure OpenAI and Anthropic
 # Python libraries to call the AIF APIM gateway.
 #
-# To run:
+# To run with pixi (reproducible conda env; manifest in examples/):
+#   export AIFAPIM_HOST=<gateway-hostname>
+#   export AIFAPIM_API_KEY=<your-apim-subscription-key>
+#   cd examples && pixi run example
+#   # or, from the repo root:
+#   #   pixi run --manifest-path examples/pixi.toml example
+#
+# Or with a manually-managed Python:
 #   pip install openai anthropic
 #   export AIFAPIM_HOST=<gateway-hostname>
 #   export AIFAPIM_API_KEY=<your-apim-subscription-key>
+#   python examples/test-apim.py
 #
 
 import os

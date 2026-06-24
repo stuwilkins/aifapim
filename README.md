@@ -538,6 +538,18 @@ singular strings, not arrays.
 
 ### Smoke test via APIM with subscription key
 
+With pixi (reproducible conda env; manifest in `examples/`):
+
+```bash
+export AIFAPIM_HOST=<gateway-hostname>
+export AIFAPIM_API_KEY="<your-key>"
+cd examples && pixi run example
+# or, from the repo root:
+#   pixi run --manifest-path examples/pixi.toml example
+```
+
+Or with a manually-managed Python:
+
 ```bash
 export AIFAPIM_HOST=<gateway-hostname>
 export AIFAPIM_API_KEY="<your-key>"

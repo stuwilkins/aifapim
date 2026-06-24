@@ -220,6 +220,26 @@ There is no automated test suite or CI. Post-deploy verification is driven by a 
 
 Reads `AIFAPIM_HOST` and `AIFAPIM_API_KEY` from the environment; raises `KeyError` if either is unset. Set them to your dev or prod gateway hostname and a valid subscription key before running. No assertions — visual inspection of output is the success criterion.
 
+### Running it
+
+The preferred invocation uses the bundled pixi environment (`examples/pixi.toml`), which pins `openai`, `anthropic`, and `rich` from conda-forge and exposes a single `example` task:
+
+```bash
+export AIFAPIM_HOST=<gateway-hostname>
+export AIFAPIM_API_KEY=<subscription-key>
+cd examples && pixi run example
+# or, from the repo root:
+#   pixi run --manifest-path examples/pixi.toml example
+```
+
+Or with any Python that has `openai` and `anthropic` installed:
+
+```bash
+export AIFAPIM_HOST=<gateway-hostname>
+export AIFAPIM_API_KEY=<subscription-key>
+python examples/test-apim.py
+```
+
 ### Standard post-deploy verification workflow
 
 1. Confirm `az deployment group create … --parameters aifapim-<env>.bicepparam` returned `Succeeded`.
@@ -231,9 +251,11 @@ Reads `AIFAPIM_HOST` and `AIFAPIM_API_KEY` from the environment; raises `KeyErro
    ```bash
    export AIFAPIM_HOST=<your-dev-gateway>
    export AIFAPIM_API_KEY=<dev-subscription-key>
-   python examples/test-apim.py
+   cd examples && pixi run example
+   # alternative without pixi:
+   #   python examples/test-apim.py
    ```
-   Every `run_chat`, `run_chat_v1`, and `run_anthropic` call should print a coherent answer.
+   Every `run_chat`, `run_chat_v1`, `run_anthropic`, and `run_embedding_v1` call should print a coherent answer (or, for embeddings, a vector dimension and prompt-token count).
 4. Smoke-test the `/models` listing routes added to all three APIs:
    ```bash
    curl -sS "https://$AIFAPIM_HOST/openai/v1/models"            -H "x-api-key: $AIFAPIM_API_KEY" | jq '.data[].id'
