@@ -56,17 +56,9 @@
         <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
     </inbound>
     <backend>
-        <base />
-        <!-- 404 is intentionally excluded from the retry condition. A 404 from
-             primary (eastus2) means the deployment does not exist there — retrying
-             to secondary (eastus) is pointless and guaranteed to fail for any model
-             that eastus does not carry. eastus has only a partial Anthropic catalog
-             (claude-haiku-4-5, claude-opus-4-8, claude-sonnet-5 as of 2026-07);
-             eastus2 has the full catalog. Only retry on 429 (rate limit) and 5xx
-             (transient server errors), both of which are worth failing over. -->
-        <retry condition="@(context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)" count="5" interval="1" delta="1" max-interval="8" first-fast-retry="false">
+        <retry condition="@(context.Response.StatusCode == 404 || context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)" count="5" interval="1" delta="1" max-interval="8" first-fast-retry="false">
             <choose>
-                <when condition="@(context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)">
+                <when condition="@(context.Response.StatusCode == 404 || context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)">
                     <set-backend-service backend-id="anthropic-secondary-backend" />
                 </when>
             </choose>

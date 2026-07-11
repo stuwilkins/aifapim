@@ -26,7 +26,6 @@
         <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
     </inbound>
     <backend>
-        <base />
         <retry condition="@(context.Response.StatusCode == 404 || context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)" count="5" interval="1" delta="1" max-interval="8" first-fast-retry="false">
             <!-- Failover logic below - uncomment to retry on secondary backend -->
             <choose>
