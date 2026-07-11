@@ -111,6 +111,17 @@ Fetch the keys with
   `privatelink.openai.azure.com`,
   `privatelink.cognitiveservices.azure.com`,
   `privatelink.services.ai.azure.com`.
+- **NSG lateral-traversal rule + private endpoint carve-out**: Both NSGs
+  (`modules/network.bicep` for the APIM subnet, `modules/vnet.bicep` for all
+  other subnets) include `Deny_Lateral_Outbound_VirtualNetwork` (priority 4096,
+  `VirtualNetwork → VirtualNetwork Deny *`) to satisfy PSRule
+  `Azure.NSG.LateralTraversal`. This rule also blocks APIM's outbound HTTPS to
+  the AI Foundry private endpoint IPs (which fall under the `VirtualNetwork`
+  service tag). The companion rule `Allow_Outbound_To_Private_Endpoints`
+  (priority 300, `VirtualNetwork → VirtualNetwork Allow TCP 443`) carves out
+  the specific path APIM needs. **Do not remove either rule without
+  understanding the dependency** — removing the allow rule causes all backend
+  requests to hang silently; removing the deny rule breaks PSRule compliance.
 - **Custom TLS**: Certificates must be stored as **secrets** (not
   certificates) in Key Vault. A user-assigned managed identity is created and
   granted Key Vault Secrets User *before* APIM is deployed to solve the

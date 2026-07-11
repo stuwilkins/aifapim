@@ -242,6 +242,26 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2020-05-01' = {
         }
       }
       {
+        // Allow APIM outbound HTTPS to AI Foundry private endpoints.
+        // Private endpoint IPs (10.0.0.x / 10.1.0.x) fall under the
+        // VirtualNetwork service tag and would otherwise be blocked by
+        // Deny_Lateral_Outbound_VirtualNetwork (priority 4096) below.
+        // This allow rule must sit at a lower priority number than the deny.
+        // Do not remove — without it, all backend traffic hangs silently.
+        name: 'Allow_Outbound_To_Private_Endpoints'
+        properties: {
+          description: 'Allow APIM outbound HTTPS to private endpoints (AI Foundry backends) in the VNet/peered VNets.'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '443'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+          access: 'Allow'
+          priority: 300
+          direction: 'Outbound'
+        }
+      }
+      {
         name: 'Deny_Lateral_Outbound_VirtualNetwork'
         properties: {
           description: 'Deny outbound lateral management connections from non-management hosts (Azure.NSG.LateralTraversal).'
