@@ -137,6 +137,7 @@ resource api 'Microsoft.ApiManagement/service/apis@2023-03-01-preview' = {
   dependsOn: [anthropicSecondaryBackend]
   properties: {
     displayName: openaiApiDisplayName
+    description: 'Azure OpenAI data-plane inference API. Supports chat completions, embeddings, and model listing operations.'
     format: 'openapi'
     value: openApiSpec
     path: apiPath
@@ -253,6 +254,7 @@ resource openaiV1MessagesApi 'Microsoft.ApiManagement/service/apis@2023-03-01-pr
   dependsOn: [diagnostic]
   properties: {
     displayName: openaiV1MessagesApiDisplayName
+    description: 'Azure OpenAI v1 Messages-compatible API. Translates OpenAI Messages format to Azure OpenAI data-plane calls.'
     path: openaiV1MessagesApiPath
     protocols: [
       'https'
@@ -336,6 +338,7 @@ resource anthropicApi 'Microsoft.ApiManagement/service/apis@2023-03-01-preview' 
   dependsOn: [openaiV1MessagesDiagnostic]
   properties: {
     displayName: anthropicApiDisplayName
+    description: 'Anthropic Claude API. Provides access to Anthropic models via the Azure AI Foundry Anthropic endpoint.'
     path: anthropicApiPath
     protocols: [
       'https'
@@ -411,7 +414,10 @@ resource apimProduct 'Microsoft.ApiManagement/service/products@2023-03-01-previe
     displayName: apimProductDisplayName
     description: apimProductDescription
     subscriptionRequired: true
-    approvalRequired: false
+    // approvalRequired: true gates portal/manual subscriptions.
+    // Programmatic provisioning via aifapim-config/apim-subscriptions.bicep
+    // creates subscriptions in 'active' state directly, bypassing this gate.
+    approvalRequired: true
     state: 'published'
   }
 }

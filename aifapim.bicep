@@ -2,7 +2,11 @@
 param location string = resourceGroup().location
 
 @description('Tags to apply to all resources.')
-param tags object = {}
+param tags object = {
+  'managed-by': 'bicep'
+  project: 'aifapim'
+  repository: 'NSLS2/aifapim'
+}
 
 @description('The SKU of the API Management instance.')
 @allowed([
@@ -289,6 +293,7 @@ module logAnalyticsWorkspace 'modules/log-analytics-workspace.bicep' = {
   params: {
     location: location
     logAnalyticsName: logAnalyticsName
+    tags: tags
   }
 }
 
@@ -298,6 +303,7 @@ module eventHub 'modules/event-hub.bicep' = {
     location: location
     eventHubNamespaceName: eventHubNamespaceName
     eventHubName: eventHubName
+    tags: tags
   }
 }
 
@@ -310,6 +316,7 @@ module applicationInsights 'modules/app-insights.bicep' = {
     uniqueSuffix: unique
     alertEmailName: alertEmailName
     alertEmailAddress: alertEmailAddress
+    tags: tags
   }
   dependsOn: [
     logAnalyticsWorkspace
@@ -325,6 +332,7 @@ module llmLatencyAlerts 'modules/llm-latency-alerts.bicep' = {
     workspaceResourceId: logAnalyticsWorkspace.outputs.id
     actionGroupId: applicationInsights.outputs.actionGroupId
     uniqueSuffix: unique
+    tags: tags
   }
 }
 
@@ -336,6 +344,7 @@ module network 'modules/network.bicep' = {
     location: location
     apiManagementSubnetName: apiManagementSubnetName
     apiManagementSubnetIPPrefix: apiManagementSubnetIPPrefix
+    tags: tags
   }
 }
 
@@ -384,6 +393,7 @@ module apiManagement 'modules/api-management-private.bicep' = {
     userAssignedIdentityClientId: !empty(keyVaultName) ? apimIdentity!.properties.clientId : ''
     disableDeveloperPortal: disableDeveloperPortal
     logAnalyticsWorkspaceId: logAnalyticsWorkspace.outputs.id
+    tags: tags
   }
   dependsOn: [
     applicationInsights

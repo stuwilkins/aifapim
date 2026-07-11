@@ -41,12 +41,16 @@ param evaluationFrequency string = 'PT5M'
 @description('Alert severity (0 = Critical, 2 = Warning, 4 = Verbose).')
 param severity int = 2
 
+@description('Tags to apply to alert resources.')
+param tags object = {}
+
 // ---------------------------------------------------------------------------
 // Alert 1: APIM gateway-overhead latency
 // ---------------------------------------------------------------------------
 resource apimOverheadAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
   name: 'APIM-Overhead-Latency-${uniqueSuffix}'
   location: location
+  tags: tags
   properties: {
     description: 'p95 of APIM gateway overhead (TotalTime - BackendTime) exceeded ${apimOverheadThresholdMs} ms over the last ${windowSize}.'
     enabled: true
@@ -94,6 +98,7 @@ ApiManagementGatewayLogs
 resource llmLatencyAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
   name: 'LLM-Latency-${uniqueSuffix}'
   location: location
+  tags: tags
   properties: {
     description: 'p95 of LLM end-to-end TotalTime exceeded ${llmLatencyThresholdMs} ms over the last ${windowSize} for one of the AI APIs.'
     enabled: true

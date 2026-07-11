@@ -36,12 +36,40 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = {
   }
 }
 
+resource defaultNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
+  name: 'nsg-${name}'
+  location: location
+  tags: tags
+  properties: {
+    securityRules: [
+      {
+        name: 'Deny_Lateral_Outbound_VirtualNetwork'
+        properties: {
+          description: 'Deny outbound lateral management connections from non-management hosts (Azure.NSG.LateralTraversal).'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+          access: 'Deny'
+          priority: 4096
+          direction: 'Outbound'
+        }
+      }
+    ]
+  }
+}
+
 @batchSize(1)
 resource subnetResources 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' = [for subnet in subnets: {
   parent: vnet
   name: subnet.name
   properties: {
     addressPrefix: subnet.addressPrefix
+    defaultOutboundAccess: false
+    networkSecurityGroup: {
+      id: defaultNsg.id
+    }
   }
 }]
 

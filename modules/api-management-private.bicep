@@ -58,6 +58,7 @@ param disableDeveloperPortal bool = true
 
 @description('Resource ID of the Log Analytics workspace to receive APIM diagnostic logs (incl. generative AI gateway / LLM logs). Leave empty to skip.')
 param logAnalyticsWorkspaceId string = ''
+param tags object = {}
 
 var enableCustomDomains = !empty(gatewayHostName) && !empty(gatewayKeyVaultSecretName)
 var enablePortalDomain = !empty(portalHostName) && !empty(portalKeyVaultSecretName)
@@ -117,6 +118,7 @@ resource aiParent 'Microsoft.Insights/components@2020-02-02-preview' existing = 
 resource apiManagementService 'Microsoft.ApiManagement/service@2023-03-01-preview' = {
   name: serviceName
   location: location
+  tags: tags
   sku: {
     name: skuName
     capacity: skuCount
@@ -150,6 +152,22 @@ resource apiManagementService 'Microsoft.ApiManagement/service@2023-03-01-previe
     legacyPortalStatus: 'Disabled'
     customProperties: {
       'Microsoft.WindowsAzure.ApiManagement.Gateway.Protocols.Server.Http2': 'true'
+      // Disable weak/deprecated ciphers and TLS protocols (Azure.APIM.Ciphers)
+      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TripleDes168': 'false'
+      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TLS_RSA_WITH_AES_128_CBC_SHA': 'false'
+      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TLS_RSA_WITH_AES_256_CBC_SHA': 'false'
+      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TLS_RSA_WITH_AES_128_CBC_SHA256': 'false'
+      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TLS_RSA_WITH_AES_256_CBC_SHA256': 'false'
+      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA': 'false'
+      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA': 'false'
+      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TLS_RSA_WITH_AES_128_GCM_SHA256': 'false'
+      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls10': 'false'
+      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls11': 'false'
+      'Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Ssl30': 'false'
+    }
+    apiVersionConstraint: {
+      // Require control-plane API version >= 2021-08-01 (Azure.APIM.MinAPIVersion)
+      minApiVersion: '2021-08-01'
     }
   }
 }

@@ -11,6 +11,7 @@ param vnetName string
 
 @description('Unique suffix for resource naming, passed from the parent deployment.')
 param uniqueSuffix string
+param tags object = {}
 
 var nsgName = 'nsg-${uniqueSuffix}'
 var routeTableName = 'rt-${uniqueSuffix}'
@@ -18,6 +19,7 @@ var routeTableName = 'rt-${uniqueSuffix}'
 resource routeTable 'Microsoft.Network/routeTables@2023-11-01' = {
   name: routeTableName
   location: location
+  tags: tags
   properties: {
     routes: [
       {
@@ -34,6 +36,7 @@ resource routeTable 'Microsoft.Network/routeTables@2023-11-01' = {
 resource nsg 'Microsoft.Network/networkSecurityGroups@2020-05-01' = {
   name: nsgName
   location: location
+  tags: tags
   properties: {
     securityRules: [
       // Rules for API Management as documented here: https://docs.microsoft.com/en-us/azure/api-management/api-management-using-with-vnet
@@ -239,6 +242,20 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2020-05-01' = {
         }
       }
       {
+        name: 'Deny_Lateral_Outbound_VirtualNetwork'
+        properties: {
+          description: 'Deny outbound lateral management connections from non-management hosts (Azure.NSG.LateralTraversal).'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+          access: 'Deny'
+          priority: 4096
+          direction: 'Outbound'
+        }
+      }
+      {
         name: 'Azure_Infrastructure_Load_Balancer'
         properties: {
           protocol: 'Tcp'
@@ -279,6 +296,7 @@ resource additionalSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-11-01'
       { service: 'Microsoft.ServiceBus' }
       { service: 'Microsoft.AzureActiveDirectory' }
     ]
+    defaultOutboundAccess: false
   }
 }
 

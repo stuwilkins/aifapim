@@ -64,6 +64,7 @@ resource aif 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
       defaultAction: 'Deny'
       bypass: 'AzureServices'
     }
+    disableLocalAuth: true
   }
 }
 

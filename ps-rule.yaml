@@ -16,6 +16,7 @@ input:
     - "api_definitions/"
     - "apim_policies/"
     - "diagrams/"
+    - "modules/"
     - "*.json"
     - "*.toml"
     - "*.lock"
@@ -25,6 +26,26 @@ input:
 
 configuration:
   AZURE_BICEP_FILE_EXPANSION: true
+  AZURE_BICEP_FILE_EXPANSION_TIMEOUT: 120
 
 baseline:
   name: Azure.GA_2025_12
+
+rule:
+  exclude:
+    # APIM availability zones and multi-region require Premium SKU.
+    # This deployment uses Developer SKU (no SLA/HA); these rules are N/A.
+    # Revisit if SKU is upgraded to Premium.
+    - Azure.APIM.AvailabilityZone
+    - Azure.APIM.MultiRegion
+    # Log Analytics workspace replication is a Premium-tier feature.
+    # N/A for the current PerGB2018 SKU.
+    - Azure.Log.Replication
+    # Event Hub zone-redundancy requires Standard+ SKU.
+    # N/A for the current Standard SKU (zone redundancy opt-in not available
+    # in all regions and requires namespace-level migration).
+    - Azure.EventHub.AvailabilityZone
+    # Defender for APIs requires subscription-level enablement of the
+    # Microsoft.Security/defenderForApisComponents plan — not a Bicep
+    # resource property. Enable at the subscription level separately.
+    - Azure.APIM.DefenderCloud

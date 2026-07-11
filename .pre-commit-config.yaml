@@ -66,10 +66,11 @@ repos:
       - id: bicep-build
         name: bicep build (az)
         language: system
-        entry: az bicep build --stdout --file
+        entry: bash -c 'for f in "$@"; do az bicep build --stdout --file "$f" >/dev/null || exit 1; done' --
         files: '\.bicep$'
-        # Runs the built-in Bicep linter; fails on error-level rules.
-        # --stdout writes compiled ARM JSON to stdout (no .json artifact).
+        # Runs the built-in Bicep linter once per file; fails on error-level
+        # rules. ARM JSON (stdout) is discarded — only diagnostics/exit code
+        # matter. The trailing `--` makes pre-commit's filenames land in "$@".
 
   # ────────────────────────────────────────────────────────────────
   # PSRule for Azure — manual stage only (opt-in, slow)
