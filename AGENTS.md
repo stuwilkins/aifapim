@@ -87,10 +87,22 @@ Fetch the keys with
   - `anthropic-service-api` — path `anthropic`, only `POST /v1/messages` and
     `POST /v1/messages/count_tokens`. Foundry returns 404 `api_not_supported`
     for `/anthropic/v1/models`; that route is intentionally not exposed.
-- **Anthropic models are only available on AI Foundry in select regions**
-  (currently `eastus2`); this is a Foundry availability constraint, not a
-  deployment choice. Populate Anthropic-format entries only in the
-  `modelDeployments[i]` whose paired `regions[i].name` hosts them.
+- **Anthropic models are available on AI Foundry in select regions only.**
+  As of 2026-07: `eastus2` has the full catalog; `eastus` carries a partial
+  subset (`claude-haiku-4-5`, `claude-opus-4-8`, `claude-sonnet-5`). Populate
+  Anthropic-format entries only in the `modelDeployments[i]` whose paired
+  `regions[i].name` actually hosts them — verify with
+  <!-- markdownlint-disable-next-line MD013 -->
+  `az cognitiveservices model list -l <region> --query "[?contains(model.name,'claude')].model.name" -o tsv`
+  before adding entries.
+- **Anthropic retry policy does NOT retry on 404.** A 404 from primary
+  (eastus2) means the deployment does not exist there — failing over to
+  secondary (eastus) is counterproductive because eastus carries fewer
+  models. The retry condition in
+  `apim_policies/Anthropic_Policy-Managed_Identity_with_Retry_MultiRegion.xml`
+  only retries on 429 (rate limit) and 5xx (server errors). Do not add 404
+  back without first verifying the target model exists in the secondary
+  region's AI Foundry catalog.
 - **APIM authenticates to AI Foundry via system-assigned managed identity**
   (no API keys to backends). End-users authenticate to APIM via APIM
   subscription keys.
