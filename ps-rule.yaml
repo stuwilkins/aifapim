@@ -8,11 +8,20 @@
 
 input:
   pathIgnore:
+    - ".git/"
     - ".pixi/"
+    - ".mypy_cache/"
     - "examples/"
     - "resources/"
     - "api_definitions/"
     - "apim_policies/"
+    - "diagrams/"
+    - "*.json"
+    - "*.toml"
+    - "*.lock"
+    - "*.md"
+    - "*.yaml"
+    - "*.yml"
 
 configuration:
   AZURE_BICEP_FILE_EXPANSION: true
