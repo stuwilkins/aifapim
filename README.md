@@ -397,54 +397,30 @@ it is always 0.
 
 ### Azure Monitor Workbook
 
-A pre-built workbook is available for visualizing LLM token usage with proper
-Model dimension support. Deploy it independently:
+The maintained workbook lives in the **`aifapim-config` repo**
+(`llm-token-usage-workbook.bicep`). Deploy it from there — see
+`aifapim-config/AGENTS.md` §"Workbook deployment" for the full recipe.
 
-```bash
-RG=<resource-group>
-
-AI_ID=$(az resource list -g "$RG" \
-  --resource-type Microsoft.Insights/components \
-  --query "[?starts_with(name, 'appIn-')].id | [0]" -o tsv)
-
-LAW_ID=$(az resource list -g "$RG" \
-  --resource-type Microsoft.OperationalInsights/workspaces \
-  --query "[?starts_with(name, 'law-')].id | [0]" -o tsv)
-
-az deployment group create \
-  -g "$RG" \
-  -f llm-token-usage-workbook.bicep \
-  -p applicationInsightsId="$AI_ID" logAnalyticsWorkspaceId="$LAW_ID"
-```
-
-The `appIn-<unique>` / `law-<unique>` prefixes are deterministic (set by
-`uniqueString(resourceGroup().id, subscription().id)` in `aifapim.bicep`), so the
-JMESPath filters resolve to a single ID in each environment. Verify post-deploy
-that the right workspace was wired with
-`az deployment group show -g "$RG" -n <deployment-name> --query properties.outputs`
-— the template echoes both inputs as `applicationInsightsIdEcho` and
-`logAnalyticsWorkspaceIdEcho`.
-
-Two parameters because `AppMetrics` is a workspace-scoped table: the workbook is
-associated with the App Insights component (so it surfaces in the AI Workbooks
-blade) but each query targets the Log Analytics workspace directly via
-`crossComponentResources`. The App Insights component query scope cannot resolve
-`AppMetrics` on its own.
-
-After deployment, find the workbook in:
-**Azure Portal → Application Insights → Workbooks → "LLM Token Usage"**
-
-The workbook includes:
+The canonical workbook includes:
 - Summary tiles (total prompt/completion/total tokens)
-- Token usage by API
-- Token usage by Model (sourced from `AppMetrics` where Model is populated)
-- Token usage by APIM Subscription (for billing)
-- Token usage over time (trend chart)
+- Token usage by API, Model, and APIM Subscription
+- Token usage over time (per subscription)
+- Cost analytics tiles (per-model and per-subscription cost from Cost Management)
+- Optional non-owner read access via an Azure AD group (Monitoring Reader)
 
-This workbook reads from `AppMetrics` rather than `ApiManagementGatewayLlmLog`
-because the latter has empty `ModelName` for Anthropic streaming on classic-
-tier APIM, and `CompletionTokens=0` for all Anthropic rows (streaming and
-non-streaming).
+This repo retains `llm-token-usage-workbook.example.bicep` as a **reference
+snapshot** of the workbook as it stood before the move to `aifapim-config`. It is
+not deployed as part of this repo and will diverge from the canonical version as
+new features are added. Do not run `az deployment group create` against the example
+file — use the canonical in `aifapim-config` instead.
+
+> **Drift warning**: the 2026-06 incident (commit `b0c4b86`) was caused by
+> deploying a stale workbook copy to prod while a newer version was in dev.
+> Always deploy from the single canonical source in `aifapim-config`.
+
+The workbook reads from `AppMetrics` rather than `ApiManagementGatewayLlmLog`
+because the latter has empty `ModelName` for Anthropic streaming on classic-tier
+APIM, and `CompletionTokens=0` for all Anthropic rows (streaming and non-streaming).
 
 ### Platform behaviors observed on classic-tier APIM (Developer SKU)
 

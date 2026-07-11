@@ -1,3 +1,17 @@
+// EXAMPLE / REFERENCE SNAPSHOT — NOT FOR DEPLOYMENT
+//
+// This file is a point-in-time snapshot of the workbook as it stood when the
+// canonical workbook was moved to the aifapim-config repo. It is kept here as
+// an illustrative reference only and is NOT deployed as part of aifapim.
+//
+// CANONICAL WORKBOOK (maintained, with cost analytics and RBAC):
+//   ~/Projects/aifapim-config/llm-token-usage-workbook.bicep
+//   Deploy recipe: see aifapim-config/AGENTS.md §"Workbook deployment"
+//
+// Do not run `az deployment group create` against this file. The canonical
+// version in aifapim-config will diverge from this snapshot over time.
+//
+// ─────────────────────────────────────────────────────────────────────────────
 // Standalone Azure Monitor Workbook for LLM Token Usage Analytics
 //
 // Deploys a workbook that visualizes token usage for all LLM APIs (AOAI, OpenAI v1
@@ -348,11 +362,15 @@ union isfuzzy=true
       }
       name: 'query-by-subscription-table'
     }
-    // Section 7: Token Usage Over Time
+    // Section 7: Token Usage Over Time (per Subscription)
+    // Groups by APIM Subscription Name (fallback Subscription ID) — the
+    // realistic per-person proxy when using subscription-key auth.
+    // Completion tokens only (parity with the removed per-Model tile);
+    // binned by day for readability across typical time ranges.
     {
       type: 1
       content: {
-        json: '### Token Usage Over Time'
+        json: '### Token Usage Over Time (per Subscription)'
       }
       name: 'text-over-time-header'
     }
@@ -366,13 +384,16 @@ union isfuzzy=true
     (datatable(TimeGenerated:datetime, Properties:dynamic, Name:string, Sum:real) [])
 | where TimeGenerated {TimeRange}
 | extend ApiId = tostring(Properties["API ID"])
-| extend Model = tostring(Properties["Model"])
+| extend
+    SubscriptionName = tostring(Properties["Subscription Name"]),
+    SubscriptionId = tostring(Properties["Subscription ID"])
 | extend TokenType = case(
       Name == "Completion Tokens" and ApiId != "anthropic-service-api", "Completion",
       Name == "Anthropic Completion Tokens", "Completion",
       "Skip")
-| where TokenType == "Completion" and isnotempty(Model)
-| summarize Tokens = sum(Sum) by bin(TimeGenerated, 1h), Model
+| where TokenType == "Completion" and (isnotempty(SubscriptionName) or isnotempty(SubscriptionId))
+| extend Subscription = iff(isnotempty(SubscriptionName), SubscriptionName, SubscriptionId)
+| summarize Tokens = sum(Sum) by bin(TimeGenerated, 1d), Subscription
 | order by TimeGenerated asc
 '''
         size: 0
@@ -386,12 +407,12 @@ union isfuzzy=true
         chartSettings: {
           xAxis: 'TimeGenerated'
           yAxis: ['Tokens']
-          group: 'Model'
+          group: 'Subscription'
           createOtherGroup: 0
           showLegend: true
         }
       }
-      name: 'query-over-time'
+      name: 'query-over-time-by-subscription'
     }
     // Section 8: Data Source Notes
     {

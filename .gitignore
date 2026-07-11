@@ -15,6 +15,7 @@ __azurite_db*__.json
 aifapim.json
 aifapim.example.json
 llm-token-usage-workbook.json
+llm-token-usage-workbook.example.json
 
 # Logs and editor/tool caches
 tmux-*.log

@@ -24,32 +24,22 @@ Do **not** prefix `.bicepparam` files with `@` on the `--parameters` flag — th
 
 The template file is **`aifapim.bicep`** (note: no hyphen).
 
-### Workbook only
+### Workbook
 
-```bash
-RG=<rg>
+**The canonical workbook now lives in the `aifapim-config` repo.** Deploy it from
+there; see `aifapim-config/AGENTS.md` §"Workbook deployment" for the full recipe
+and `aifapim-config/llm-token-usage-workbook.bicep` for the maintained source.
 
-AI_ID=$(az resource list -g "$RG" \
-  --resource-type Microsoft.Insights/components \
-  --query "[?starts_with(name, 'appIn-')].id | [0]" -o tsv)
+The canonical workbook includes cost-analytics tiles and optional non-owner group
+read access (Monitoring Reader) in addition to the token-usage views. It is a
+separate `az deployment group create` from the main APIM stack, as it always was.
 
-LAW_ID=$(az resource list -g "$RG" \
-  --resource-type Microsoft.OperationalInsights/workspaces \
-  --query "[?starts_with(name, 'law-')].id | [0]" -o tsv)
-
-az deployment group create \
-  -g "$RG" \
-  -f llm-token-usage-workbook.bicep \
-  -p applicationInsightsId="$AI_ID" logAnalyticsWorkspaceId="$LAW_ID"
-```
-
-Both IDs are required: the workbook is associated with the App Insights component
-but its KQL queries target the Log Analytics workspace directly via
-`crossComponentResources`, because `AppMetrics` (the workspace-scoped custom-metric
-table) does not resolve under the component query scope. The template echoes both
-inputs as outputs (`applicationInsightsIdEcho`, `logAnalyticsWorkspaceIdEcho`) so
-the right wiring can be confirmed via `az deployment group show … --query
-properties.outputs` without REST-fetching the workbook's `serializedData`.
+This repo retains `llm-token-usage-workbook.example.bicep` — a **point-in-time
+snapshot** of the workbook as it stood before the move. It is an illustrative
+reference only; do **not** deploy it. The canonical version will diverge from this
+snapshot as cost tiles and other features are added. The 2026-06 drift gotcha
+(commit `b0c4b86`, documented below) is the exact failure mode of running a stale
+copy — avoid it by always deploying from `aifapim-config`.
 
 ### Provision a user subscription key
 
@@ -83,9 +73,9 @@ Fetch the keys with `az rest --method POST .../subscriptions/<name>/listSecrets?
 ## Module layout
 
 ```
-aifapim.bicep                   # Orchestrator — start reading here
-aifapim.example.bicepparam      # Parameter template — copy to aifapim-<env>.bicepparam and customize
-llm-token-usage-workbook.bicep  # Standalone workbook deployment
+aifapim.bicep                           # Orchestrator — start reading here
+aifapim.example.bicepparam              # Parameter template — copy to aifapim-<env>.bicepparam and customize
+llm-token-usage-workbook.example.bicep  # Reference snapshot only — NOT deployed (canonical in aifapim-config)
 modules/
   aif.bicep                     # AI Foundry account + private endpoint
   aif-deployments.bicep         # Model deployments (sub-module; avoids race on account provisioning)
