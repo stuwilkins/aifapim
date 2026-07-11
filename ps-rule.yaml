@@ -1,0 +1,21 @@
+---
+# PSRule for Azure configuration.
+# Docs: https://azure.github.io/PSRule.Rules.Azure/
+#
+# Bicep files are automatically expanded to ARM JSON for analysis.
+# Run manually in-sandbox: pixi run -e dev lint-psrule
+# CI: .github/workflows/psrule.yml (advisory — SARIF only, does not fail build)
+
+input:
+  pathIgnore:
+    - ".pixi/"
+    - "examples/"
+    - "resources/"
+    - "api_definitions/"
+    - "apim_policies/"
+
+configuration:
+  AZURE_BICEP_FILE_EXPANSION: true
+
+baseline:
+  name: Azure.GA_2025_12

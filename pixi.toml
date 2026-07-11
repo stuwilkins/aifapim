@@ -1,0 +1,21 @@
+[workspace]
+channels = ["conda-forge"]
+description = "Azure AI Foundry + API Management IaC"
+name = "aifapim"
+platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
+version = "0.1.0"
+
+[feature.dev.dependencies]
+pre-commit = "*"
+nodejs     = "*"
+# Versions must match rev: pins in .pre-commit-config.yaml
+codespell  = "==2.4.2"
+
+[feature.dev.tasks]
+lint       = "pre-commit run --all-files"
+lint-files = "pre-commit run --files"
+lint-psrule = "pre-commit run --hook-stage manual psrule"
+
+[environments]
+default = { solve-group = "default" }
+dev     = { features = ["dev"], solve-group = "default" }

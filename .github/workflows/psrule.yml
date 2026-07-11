@@ -1,0 +1,48 @@
+---
+# PSRule for Azure — Bicep IaC analysis against the Azure Well-Architected
+# Framework. Results are uploaded as SARIF to the GitHub Security tab.
+#
+# Advisory mode: continue-on-error: true — findings are surfaced but do not
+# fail the build. Flip to false once the baseline has been triaged.
+
+name: PSRule for Azure
+permissions:
+  contents: read
+  security-events: write  # required for upload-sarif
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  psrule:
+    name: PSRule for Azure
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Bicep CLI
+        run: az bicep install
+
+      - name: Run PSRule for Azure
+        uses: microsoft/ps-rule@46451b8f5258c41beb5ae69ed7190ccbba84112c  # v2.9.0
+        continue-on-error: true  # advisory — remove once baseline is triaged
+        with:
+          modules: PSRule.Rules.Azure
+          inputType: repository
+          outputFormat: Sarif
+          outputPath: reports/ps-rule-results.sarif
+
+      - name: Upload SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/ps-rule-results.sarif
+          category: psrule-azure
