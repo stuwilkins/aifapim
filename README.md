@@ -261,10 +261,12 @@ apim_policies/
   AOAI_Policy-Managed_Identity_with_Retry_MultiRegion.xml       # AOAI multi-region with failover
   OpenAIv1Messages_Policy-Managed_Identity_with_Retry_MultiRegion.xml  # AOAI v1 Messages multi-region with failover
   Anthropic_Policy-Managed_Identity_with_Retry_MultiRegion.xml  # Anthropic multi-region with failover
+  Catalog_Policy.xml                                             # Static return-response; no backend
 api_definitions/
   AzureOpenAI_inference_2024-10-21.yaml  # AOAI data-plane inference spec; vendored from azure-rest-api-specs
   AzureOpenAI_v1_Messages_OpenAPI.json   # AOAI v1 Messages OpenAPI spec imported into APIM
   AzureAnthropic_OpenAPI.json            # Anthropic OpenAPI spec imported into APIM
+  Catalog_OpenAPI.json                   # GET /catalog static model list
 resources/                       # User-supplied CA PEMs loaded via loadTextContent
                                  # in the bicepparam file. Directory is gitignored
                                  # aside from a .gitkeep; see "Custom Domains & TLS".
@@ -285,6 +287,10 @@ All policies include:
   excluded). Typical contents are your client network range plus any
   provider-side egress IPs you need to allow (for example, the Anthropic
   egress IPs needed for `/anthropic/*` traffic on Foundry).
+
+The three **inference** policies (`AOAI`, `OpenAIv1Messages`, `Anthropic`)
+additionally include:
+
 - **Managed Identity auth**: APIM authenticates to AI Foundry backends
   using its system-assigned identity
 - **Retry & failover**: Retry on `404`, `429`, and `5xx`; on persistent
@@ -297,6 +303,11 @@ All policies include:
   the configured `apimProductName`, substituted into the policy XML at deploy
   time via the `__METRIC_NAMESPACE__` sentinel. See **Token Usage Analytics**
   below.
+
+The **catalog** policy (`Catalog_Policy.xml`) uses `<return-response>` in
+`<inbound>` — no backend is contacted, so managed identity auth, retry, and
+token metrics do not apply. The catalog JSON body is baked in at deploy time
+via the `__CATALOG_JSON__` sentinel.
 
 ### Authentication model
 
