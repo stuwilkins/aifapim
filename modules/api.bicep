@@ -48,6 +48,30 @@ param apimProductDisplayName string
 @description('Description for the APIM product.')
 param apimProductDescription string
 
+@description('Resource name for the catalog API.')
+param catalogApiName string
+
+@description('Display name for the catalog API.')
+param catalogApiDisplayName string
+
+@description('URL path for the catalog API (no leading slash).')
+param catalogApiPath string
+
+@description('Inline policy XML for the catalog API (return-response; catalog body baked in).')
+param catalogApiXml string
+
+@description('Inline OpenAPI (JSON) spec for the catalog API.')
+param catalogOpenApiSpec string
+
+@description('Resource name for the catalog-only APIM product.')
+param catalogProductName string
+
+@description('Display name for the catalog product.')
+param catalogProductDisplayName string
+
+@description('Description for the catalog product.')
+param catalogProductDescription string
+
 resource parentAPIM 'Microsoft.ApiManagement/service@2023-03-01-preview' existing = {
   name: apimName
 }
@@ -437,4 +461,60 @@ resource apimProductOpenAiV1MessagesApi 'Microsoft.ApiManagement/service/product
   parent: apimProduct
   name: openaiV1MessagesApi.name
   dependsOn: [apimProductAnthropicApi]
+}
+
+// --- Catalog API: static return-response, no backend ---
+//
+// GET /catalog returns the curated model list baked in at deploy time.
+// Chained after the main product associations to maintain the linear
+// dependsOn serialization required on Developer SKU APIM.
+
+resource catalogApi 'Microsoft.ApiManagement/service/apis@2023-03-01-preview' = {
+  parent: parentAPIM
+  name: catalogApiName
+  dependsOn: [apimProductOpenAiV1MessagesApi]
+  properties: {
+    displayName: catalogApiDisplayName
+    description: 'Returns the curated list of chat-LLM models with provider, context window, and max output tokens. Body is static and baked in at deploy time — no backend call is made.'
+    format: 'openapi+json'
+    value: catalogOpenApiSpec
+    path: catalogApiPath
+    subscriptionRequired: true
+    subscriptionKeyParameterNames: {
+      header: 'x-api-key'
+      query: 'subscription-key'
+    }
+  }
+}
+
+resource catalogApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2023-03-01-preview' = {
+  parent: catalogApi
+  name: 'policy'
+  properties: {
+    format: 'xml'
+    value: catalogApiXml
+  }
+}
+
+// --- Catalog product: scoped to /catalog only ---
+//
+// Keys issued under this product cannot call inference endpoints.
+// Intended for the ansible catalog poller (machine consumer, vaulted key).
+
+resource catalogProduct 'Microsoft.ApiManagement/service/products@2023-03-01-preview' = {
+  parent: parentAPIM
+  name: catalogProductName
+  dependsOn: [catalogApiPolicy]
+  properties: {
+    displayName: catalogProductDisplayName
+    description: catalogProductDescription
+    subscriptionRequired: true
+    approvalRequired: true
+    state: 'published'
+  }
+}
+
+resource catalogProductCatalogApi 'Microsoft.ApiManagement/service/products/apis@2023-03-01-preview' = {
+  parent: catalogProduct
+  name: catalogApi.name
 }

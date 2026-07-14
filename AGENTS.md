@@ -75,18 +75,33 @@ Fetch the keys with
 - **Two regions**: `eastus` (label `eus`, primary index 0) and `eastus2`
   (label `eus2`, primary index 1). **`regions[1]` (eastus2) is the primary
   backend**; eastus is the failover.
-- **Three APIs** exposed via APIM, all grouped under a single configurable
-  product (`apimProductName`, default `aifapim`), all using `x-api-key` header
+- **Four APIs** exposed via APIM, all using `x-api-key` header
   (not `Authorization: Bearer`):
   - `azure-openai-service-api` — path `""` (root), OpenAI Chat/Completions,
     plus `GET /models?api-version=...` and
-    `GET /models/{model_id}?api-version=...` (classic AOAI listing)
+    `GET /models/{model_id}?api-version=...` (classic AOAI listing).
+    Grouped under `apimProductName` product (default `aifapim`).
   - `azure-openai-v1-messages-api` — path `openai`, OpenAI v1 Responses API
     (requires `openai>=1.66.0`), plus `GET /v1/models` and
-    `GET /v1/models/{model}`
+    `GET /v1/models/{model}`.
+    Grouped under `apimProductName` product.
   - `anthropic-service-api` — path `anthropic`, only `POST /v1/messages` and
     `POST /v1/messages/count_tokens`. Foundry returns 404 `api_not_supported`
     for `/anthropic/v1/models`; that route is intentionally not exposed.
+    Grouped under `apimProductName` product.
+  - `catalog-api` — path `catalog`, `GET /catalog` only. Returns a static
+    JSON array of chat-LLM models with `id`, `name`, `provider`, `context`,
+    and `output` fields baked in at deploy time from `model-catalog.json`
+    (in the `aifapim-config` repo, passed as the `catalogJson` param).
+    Grouped under its own **`aifapim-catalog` product** — keys scoped to this
+    product cannot call any inference endpoint. No backend is contacted;
+    the policy uses `<return-response>` in `<inbound>`. Used by the ansible
+    catalog poller to discover models and token windows at play-time.
+    **Route composition note:** APIM constructs the gateway route as
+    `<API path> + <operation urlTemplate>`. The catalog API uses
+    `path = 'catalog'` and `urlTemplate = '/'`, giving the effective route
+    `/catalog`. Do **not** put `/catalog` in the OpenAPI operation path — that
+    doubles the segment to `/catalog/catalog` and produces a 404.
 - **Anthropic models are available on AI Foundry in select regions only.**
   As of 2026-07: `eastus2` has the full catalog; `eastus` carries a partial
   subset (`claude-haiku-4-5`, `claude-opus-4-8`, `claude-sonnet-5`). Populate
@@ -158,10 +173,12 @@ modules/
   private-dns-zone.bicep        # Private DNS zone for AI Foundry endpoints
   vnet.bicep                    # Virtual network
 apim_policies/                  # APIM policy XML (loaded inline via loadTextContent)
+                                #   Catalog_Policy.xml  (return-response; no backend)
 api_definitions/                # OpenAPI specs (loaded inline via loadTextContent):
                                 #   AzureOpenAI_inference_2024-10-21.yaml  (root API; vendored from azure-rest-api-specs)
                                 #   AzureOpenAI_v1_Messages_OpenAPI.json   (v1 Messages API)
                                 #   AzureAnthropic_OpenAPI.json            (Anthropic Messages API)
+                                #   Catalog_OpenAPI.json                   (GET /catalog; static model list)
 resources/                      # User-supplied CA PEMs loaded via loadTextContent
                                 # in the bicepparam file (intermediateCaCert /
                                 # rootCaCert params). Gitignored except .gitkeep.
@@ -408,18 +425,32 @@ python examples/test-apim.py
    Every `run_chat`, `run_chat_v1`, `run_anthropic`, and `run_embedding_v1`
    call should print a coherent answer (or, for embeddings, a vector dimension
    and prompt-token count).
-4. Smoke-test the `/models` listing routes added to all three APIs:
+4. Smoke-test the `/models` listing routes added to the inference APIs and
+   the new `/catalog` endpoint:
 
    ```bash
    curl -sS "https://$AIFAPIM_HOST/openai/v1/models" \
      -H "x-api-key: $AIFAPIM_API_KEY" | jq '.data[].id'
    curl -sS "https://$AIFAPIM_HOST/models?api-version=2024-10-21" \
      -H "x-api-key: $AIFAPIM_API_KEY" | jq '.data[].id'
+
+   # Catalog endpoint — use a key scoped to the aifapim-catalog product.
+   # Issue the key first: see aifapim-config/catalog-key.sh.
+   export CATALOG_KEY=<catalog-product-key>
+   curl -sS "https://$AIFAPIM_HOST/catalog" \
+     -H "x-api-key: $CATALOG_KEY" | jq '.[].id'
+
+   # Verify the catalog key cannot call inference (must return 401):
+   curl -sS "https://$AIFAPIM_HOST/openai/v1/models" \
+     -H "x-api-key: $CATALOG_KEY"
    ```
 
-   Both must return 200 with a non-empty `data` array. Foundry intentionally
-   does not proxy `/anthropic/v1/models` (returns 404 `api_not_supported`) —
-   do not test that route.
+   The inference listing routes must return 200 with a non-empty `data` array.
+   `/catalog` must return 200 with a non-empty JSON array of model objects.
+   The catalog key against any inference route must return 401 (not 403 —
+   the key is valid but not in the inference product's subscription list).
+   Foundry intentionally does not proxy `/anthropic/v1/models` (returns 404
+   `api_not_supported`) — do not test that route.
 5. Tail `ApiManagementGatewayLogs` in Log Analytics (workspace `law-<unique>`)
    for the last 15 minutes and confirm no unexpected 4xx/5xx:
 

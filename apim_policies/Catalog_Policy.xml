@@ -1,0 +1,28 @@
+<policies>
+  <inbound>
+    <!-- The ip-filter allow-list below is substituted at deploy time by
+         aifapim.bicep from the allowedClientIps parameter (see aifapim.bicepparam). -->
+    <ip-filter action="allow">
+      __ALLOWED_CLIENT_IPS__
+    </ip-filter>
+    <!-- Static return-response: no backend call is made. The catalog body is
+         baked in at deploy time via the __CATALOG_JSON__ sentinel, which
+         aifapim.bicep replaces with the contents of model-catalog.json. -->
+    <return-response>
+      <set-status code="200" reason="OK" />
+      <set-header name="Content-Type" exists-action="override">
+        <value>application/json</value>
+      </set-header>
+      <set-body>__CATALOG_JSON__</set-body>
+    </return-response>
+  </inbound>
+  <backend>
+    <base />
+  </backend>
+  <outbound>
+    <base />
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>

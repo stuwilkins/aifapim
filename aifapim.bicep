@@ -107,6 +107,9 @@ param apimProductDisplayName string = 'AIFAPIM'
 @description('Description for the APIM product.')
 param apimProductDescription string = 'AI Foundry APIM product. Groups the Azure OpenAI, Azure OpenAI v1 Messages, and Anthropic APIs.'
 
+@description('Curated model catalog JSON array (id/name/provider/context/output per chat-LLM model). Populated in the bicepparam file via loadTextContent(\'./model-catalog.json\'). Baked into the GET /catalog return-response policy at deploy time.')
+param catalogJson string
+
 // Render the IP allow-list entries as APIM ip-filter child elements. CIDR
 // entries become <address-range from=... to=.../> using parseCidr's
 // firstUsable/lastUsable; bare addresses become <address>...</address>.
@@ -129,6 +132,10 @@ var anthropicApiXml = replace(replace(replace(loadTextContent('apim_policies/Ant
 // OpenAI v1 Messages API policy (multi-region retry variant).
 var openaiV1MessagesApiXml = replace(replace(replace(loadTextContent('apim_policies/OpenAIv1Messages_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName)
 
+// Catalog API policy: static return-response, no backend.
+// Sentinels replaced: __ALLOWED_CLIENT_IPS__ (IP filter) and __CATALOG_JSON__ (model list body).
+var catalogApiXml = replace(replace(loadTextContent('apim_policies/Catalog_Policy.xml'), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__CATALOG_JSON__', catalogJson)
+
 // Azure OpenAI data-plane inference spec is pinned locally so deployments are
 // deterministic and do not depend on github.com being reachable at deploy time.
 // Source: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/data-plane/AzureOpenAI/inference/stable/2024-10-21/inference.yaml
@@ -150,6 +157,13 @@ var openaiV1MessagesApiDisplayName = 'Azure OpenAI v1 Messages API'
 var anthropicApiName = 'anthropic-service-api'
 var anthropicApiPath = 'anthropic'
 var anthropicApiDisplayName = 'Anthropic Service API'
+
+var catalogApiName = 'catalog-api'
+var catalogApiPath = 'catalog'
+var catalogApiDisplayName = 'AIFAPIM Model Catalog API'
+var catalogProductName = 'aifapim-catalog'
+var catalogProductDisplayName = 'AIFAPIM Catalog'
+var catalogProductDescription = 'Read-only product scoped to GET /catalog only. Used by the ansible catalog poller to discover models and token windows. Keys issued under this product cannot call inference endpoints.'
 
 var unique = uniqueString(resourceGroup().id, subscription().id)
 var apiManagementServiceName = 'apim-${unique}'
@@ -429,6 +443,14 @@ module api 'modules/api.bicep' = {
     apimProductName: apimProductName
     apimProductDisplayName: apimProductDisplayName
     apimProductDescription: apimProductDescription
+    catalogApiName: catalogApiName
+    catalogApiPath: catalogApiPath
+    catalogApiDisplayName: catalogApiDisplayName
+    catalogApiXml: catalogApiXml
+    catalogOpenApiSpec: loadTextContent('api_definitions/Catalog_OpenAPI.json')
+    catalogProductName: catalogProductName
+    catalogProductDisplayName: catalogProductDisplayName
+    catalogProductDescription: catalogProductDescription
   }
 }
 

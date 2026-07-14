@@ -1,0 +1,51 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "AIFAPIM Model Catalog API",
+    "description": "Returns the curated list of chat-LLM models served by this gateway, including provider, context window, and max output tokens. Body is baked in at deploy time from model-catalog.json in the aifapim-config repo.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "getCatalog",
+        "summary": "List all available chat-LLM models with token window metadata",
+        "responses": {
+          "200": {
+            "description": "Array of model catalog entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["id", "name", "provider", "context", "output"],
+                    "properties": {
+                      "id":       { "type": "string",  "description": "Model deployment name (pass as 'model' in API requests)" },
+                      "name":     { "type": "string",  "description": "Human-readable display name" },
+                      "provider": { "type": "string",  "description": "Model provider (OpenAI or Anthropic)" },
+                      "context":  { "type": "integer", "description": "Maximum context window in tokens" },
+                      "output":   { "type": "integer", "description": "Maximum output tokens" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Missing or invalid subscription key" },
+          "403": { "description": "Client IP not in allow-list" }
+        },
+        "security": [{ "apiKeyHeader": [] }]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiKeyHeader": {
+        "type": "apiKey",
+        "name": "x-api-key",
+        "in": "header"
+      }
+    }
+  }
+}
