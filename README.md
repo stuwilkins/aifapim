@@ -15,15 +15,18 @@ notice.
 
 ## Usage
 
-You can call models deployed behind APIM using standard OpenAI and Anthropic Python SDKs.
+You can call models deployed behind APIM using standard OpenAI and
+Anthropic Python SDKs.
 
 ### Prerequisites
 
 - Python 3.8+
-- `pip install "openai>=1.66.0" anthropic rich` — `openai>=1.66.0` is required
-  for the v1 Responses API example; earlier versions suffice for Chat Completions only
+- `pip install "openai>=1.66.0" anthropic rich` — `openai>=1.66.0` is
+  required for the v1 Responses API example; earlier versions suffice for
+  Chat Completions only
 - Set your APIM subscription key: `export AIFAPIM_API_KEY=...`
-- The gateway supports HTTP/2; clients using `httpx` need `pip install httpx[h2]` and `http2=True` to negotiate it.
+- The gateway supports HTTP/2; clients using `httpx` need
+  `pip install httpx[h2]` and `http2=True` to negotiate it.
 
 ### Example: Query OpenAI-compatible model (GPT, Llama, etc.)
 
@@ -155,23 +158,33 @@ by changing a single environment variable.
 For the full OpenCode configuration reference, see the
 [OpenCode config docs](https://opencode.ai/docs/config/).
 
-See `examples/test-apim.py` for a full script with Markdown rendering and more advanced usage.
+See `examples/test-apim.py` for a full script with Markdown rendering and
+more advanced usage.
 
 ## Architecture
 
 ![Architecture Diagram](diagrams/arch.svg)
 
-- **Multi-region**: Two AI Foundry accounts with private endpoints in separate VNets, peered together.
-- **Private networking**: AI Foundry endpoints are disabled for public access; APIM reaches them via private endpoints and shared private DNS zones.
-- **Managed Identity auth**: APIM authenticates to AI Foundry using its system-assigned managed identity (Azure AI User / Cognitive Services OpenAI User roles).
-- **Custom domains**: APIM gateway uses TLS certificates from Azure Key Vault (RBAC-based), with InCommon CA certificates in the trust store.
-- **Retry & failover**: Automatic retry and failover from primary to secondary region.
+- **Multi-region**: Two AI Foundry accounts with private endpoints in
+  separate VNets, peered together.
+- **Private networking**: AI Foundry endpoints are disabled for public
+  access; APIM reaches them via private endpoints and shared private DNS
+  zones.
+- **Managed Identity auth**: APIM authenticates to AI Foundry using its
+  system-assigned managed identity (Azure AI User / Cognitive Services
+  OpenAI User roles).
+- **Custom domains**: APIM gateway uses TLS certificates from Azure Key
+  Vault (RBAC-based), with InCommon CA certificates in the trust store.
+- **Retry & failover**: Automatic retry and failover from primary to
+  secondary region.
 
-## Prerequisites
+## Deployment Prerequisites
 
 - Azure CLI (`az`) with Bicep support
-- A subscription with permissions to create Cognitive Services, APIM, VNets, and role assignments
-- For custom domains: a Key Vault (RBAC-enabled) with PFX certificates stored as secrets
+- A subscription with permissions to create Cognitive Services, APIM,
+  VNets, and role assignments
+- For custom domains: a Key Vault (RBAC-enabled) with PFX certificates
+  stored as secrets
 
 ## Deployment
 
@@ -272,8 +285,11 @@ All policies include:
   excluded). Typical contents are your client network range plus any
   provider-side egress IPs you need to allow (for example, the Anthropic
   egress IPs needed for `/anthropic/*` traffic on Foundry).
-- **Managed Identity auth**: APIM authenticates to AI Foundry backends using its system-assigned identity
-- **Retry & failover**: Retry on `404`, `429`, and `5xx`; on persistent failure, fail over from the primary backend to the secondary backend in the other region.
+- **Managed Identity auth**: APIM authenticates to AI Foundry backends
+  using its system-assigned identity
+- **Retry & failover**: Retry on `404`, `429`, and `5xx`; on persistent
+  failure, fail over from the primary backend to the secondary backend in
+  the other region.
 - **Token metrics**: Each LLM API policy emits per-request token metrics to
   Application Insights via `<llm-emit-token-metric>` (or the AOAI-specific
   `<azure-openai-emit-token-metric>` variant) with dimensions for API ID,
@@ -326,12 +342,12 @@ component connected to the APIM service:
 
 ### Source comparison
 
-| Field                      | AOAI in `LlmLog`                                | Anthropic in `LlmLog`     | Anthropic in `AppMetrics`                                  |
-|----------------------------|-------------------------------------------------|---------------------------|------------------------------------------------------------|
-| Prompt tokens              | populated                                       | populated                 | populated (`Prompt Tokens` via `<llm-emit-token-metric>`)  |
-| Completion tokens          | populated only when client sets `stream_options.include_usage=true` | **always 0** (streaming and non-streaming) | non-streaming: populated (`Anthropic Completion Tokens` from `<outbound>` policy). streaming: **unmeasurable** (SSE body cannot be parsed in `<outbound>`) |
-| `ModelName` / `Model`      | populated on most streaming rows (~12/15 sample)| **always empty** (0/194)  | populated under `Properties.Model`                         |
-| `DeploymentName`           | populated                                       | populated                 | (in `Properties.Model`)                                    |
+| Field | AOAI in `LlmLog` | Anthropic in `LlmLog` | Anthropic in `AppMetrics` |
+| --- | --- | --- | --- |
+| Prompt tokens | populated | populated | populated (`Prompt Tokens` via `<llm-emit-token-metric>`) |
+| Completion tokens | populated only when client sets `stream_options.include_usage=true` | **always 0** (streaming and non-streaming) | non-streaming: populated (`Anthropic Completion Tokens` from `<outbound>` policy). streaming: **unmeasurable** (SSE body cannot be parsed in `<outbound>`) |
+| `ModelName` / `Model` | populated on most streaming rows (~12/15 sample) | **always empty** (0/194) | populated under `Properties.Model` |
+| `DeploymentName` | populated | populated | (in `Properties.Model`) |
 
 ### Per-subscription Anthropic token usage (last 7 days)
 
@@ -402,6 +418,7 @@ The maintained workbook lives in the **`aifapim-config` repo**
 `aifapim-config/AGENTS.md` §"Workbook deployment" for the full recipe.
 
 The canonical workbook includes:
+
 - Summary tiles (total prompt/completion/total tokens)
 - Token usage by API, Model, and APIM Subscription
 - Token usage over time (per subscription)
@@ -464,9 +481,18 @@ critical for downstream tooling, options are:
 
 ### Foundry-side diagnostics
 
-In addition to the APIM-managed `ApiManagementGatewayLogs` / `ApiManagementGatewayLlmLog` / `AppMetrics` tables, each AI Foundry account also writes its own diagnostic logs to the same Log Analytics workspace by default. This captures traffic that bypasses the gateway (Entra-ID-authenticated direct callers, internal Foundry portal usage) and management-plane events (account/deployment configuration changes).
+In addition to the APIM-managed `ApiManagementGatewayLogs` /
+`ApiManagementGatewayLlmLog` / `AppMetrics` tables, each AI Foundry account
+also writes its own diagnostic logs to the same Log Analytics workspace by
+default. This captures traffic that bypasses the gateway
+(Entra-ID-authenticated direct callers, internal Foundry portal usage) and
+management-plane events (account/deployment configuration changes).
 
-Default-on categories: `Audit`, `AzureOpenAIRequestUsage`, and `AllMetrics`. The verbose `RequestResponse` (full request/response bodies) and `Trace` (internal traces) categories are off by default; flip them on per-deployment via `aifDiagnosticsEnableRequestResponse=true` and `aifDiagnosticsEnableTrace=true` when troubleshooting.
+Default-on categories: `Audit`, `AzureOpenAIRequestUsage`, and `AllMetrics`.
+The verbose `RequestResponse` (full request/response bodies) and `Trace`
+(internal traces) categories are off by default; flip them on per-deployment
+via `aifDiagnosticsEnableRequestResponse=true` and
+`aifDiagnosticsEnableTrace=true` when troubleshooting.
 
 Foundry logs land in `AzureDiagnostics`, distinct from the APIM tables:
 
@@ -536,3 +562,8 @@ python examples/test-apim.py
 
 See `examples/opencode.json` and the [OpenCode configuration](#example-opencode-configuration)
 section above for the full setup.
+
+## AI Disclosure
+
+This repository's contents are largely AI-generated with human
+review. See [`AI_DISCLOSURE.md`](AI_DISCLOSURE.md) for details.
