@@ -46,6 +46,9 @@ resource deployments 'Microsoft.CognitiveServices/accounts/deployments@2025-10-0
         countryCode: anthropicCountryCode
         organizationName: anthropicOrganizationName
       }
+    } : {},
+    (startsWith(deployment.model, 'gpt-') && contains(deployment, 'raiPolicyName')) ? {
+      raiPolicyName: deployment.raiPolicyName
     } : {}
   )
 }]
