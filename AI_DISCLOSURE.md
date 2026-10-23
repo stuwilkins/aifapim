@@ -6,6 +6,7 @@ models-used:
   - claude-sonnet-4-6
   - claude-haiku-4-5
   - gpt-5.4
+  - claude-opus-5-5
 providers:
   - Anthropic
   - OpenAI
@@ -18,7 +19,7 @@ scope:
     *.biceparam), APIM policy XML (apim_policies/), API definitions
     (api_definitions/), and example scripts (examples/) — all with
     human review and validation.
-last-updated: 2026-07-14
+last-updated: 2026-10-23
 ---
 
 # AI Disclosure
