@@ -18,6 +18,13 @@
                 return &quot;&quot;;
             }
         }" />
+        <!-- Fail over to the secondary region only for models deployed there.
+             __SECONDARY_MODELS__ is substituted at deploy time by aifapim.bicep
+             as '|name|name|...' from modelDeployments[0]. -->
+        <set-variable name="canFailover" value="@{
+            var model = (string)context.Variables.GetValueOrDefault(&quot;requestModel&quot;, &quot;&quot;);
+            return model.Length &gt; 0 &amp;&amp; &quot;__SECONDARY_MODELS__&quot;.Contains(&quot;|&quot; + model + &quot;|&quot;);
+        }" />
         <llm-token-limit tokens-per-minute="10000000" counter-key="@(context.Subscription.Id)" estimate-prompt-tokens="true" tokens-consumed-header-name="consumed-tokens" remaining-tokens-header-name="remaining-tokens" />
         <!-- Emit token metrics under a custom namespace, parallel to the
              Anthropic policy. Captures the Model dimension explicitly so that
@@ -36,10 +43,13 @@
     </inbound>
     <backend>
         <!-- 404 is not retried: it means the deployment does not exist, so the
-             backend response is returned to the client unchanged. -->
+             backend response is returned to the client unchanged. Failover to
+             the secondary backend happens only when canFailover is set (the
+             model is deployed in the secondary region); otherwise the retry
+             goes back to the current backend. -->
         <retry condition="@(context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)" count="5" interval="1" delta="1" max-interval="8" first-fast-retry="false">
             <choose>
-                <when condition="@(context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)">
+                <when condition="@((context.Response.StatusCode == 429 || context.Response.StatusCode >= 500) &amp;&amp; context.Variables.GetValueOrDefault&lt;bool&gt;(&quot;canFailover&quot;, false))">
                     <set-backend-service backend-id="aoai-v1-messages-secondary-backend" />
                 </when>
             </choose>

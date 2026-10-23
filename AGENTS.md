@@ -121,6 +121,19 @@ Fetch the keys with
   back. Do not add `<base />` to the `<backend>` section either: APIM
   allows one backend policy, and `<base />` plus `<retry>` fails deploy
   validation (see `7b299f5`, which also reverted this fix by accident).
+- **Inference retry policies fail over only for models the secondary has.**
+  Each policy sets `canFailover` in `<inbound>` from the request's model
+  (body `model` for Anthropic and OpenAI v1, the path segment after
+  `deployments` for AOAI) and checks it against `__SECONDARY_MODELS__`,
+  which `aifapim.bicep` fills with `'|name|name|'` from `modelDeployments[0]`
+  (the secondary region). Models not in that list (all Claude models today)
+  retry against the primary with the normal backoff. Why: on 2026-10-23 a
+  prod `eastus2` connection reset (`BackendConnectionFailure`, socket error
+  10054, about 19 s in) on 14 Claude requests triggered failover to `eastus`,
+  which has no Claude deployments, and clients saw a 404 "deployment does
+  not exist" instead of a retry. Azure metrics showed no 429s or 5xx from
+  `eastus2` in that window. If Claude is later deployed in `eastus`, add it
+  to `modelDeployments[0]` and it will fail over automatically.
 - **APIM authenticates to AI Foundry via system-assigned managed identity**
   (no API keys to backends). End-users authenticate to APIM via APIM
   subscription keys.

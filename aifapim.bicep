@@ -124,13 +124,16 @@ var allowedIpsXml = join(map(allowedClientIps, ip => contains(ip, '/')
 //   __BACKEND_TIMEOUT__    -> backendTimeoutSeconds (forward-request timeout)
 //   __ALLOWED_CLIENT_IPS__ -> allowedIpsXml (ip-filter allow-list built from allowedClientIps)
 //   __METRIC_NAMESPACE__   -> apimProductName (App Insights custom-metric namespace)
-var openApiXml = replace(replace(replace(loadTextContent('apim_policies/AOAI_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName)
+//   __SECONDARY_MODELS__   -> secondaryModelList (models deployed in the secondary region;
+//                             the policies fail over only for these)
+var secondaryModelList = '|${join(map(modelDeployments[0], d => d.name), '|')}|'
+var openApiXml = replace(replace(replace(replace(loadTextContent('apim_policies/AOAI_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), '__SECONDARY_MODELS__', secondaryModelList)
 
 // Anthropic API policy (multi-region retry variant).
-var anthropicApiXml = replace(replace(replace(loadTextContent('apim_policies/Anthropic_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName)
+var anthropicApiXml = replace(replace(replace(replace(loadTextContent('apim_policies/Anthropic_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), '__SECONDARY_MODELS__', secondaryModelList)
 
 // OpenAI v1 Messages API policy (multi-region retry variant).
-var openaiV1MessagesApiXml = replace(replace(replace(loadTextContent('apim_policies/OpenAIv1Messages_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName)
+var openaiV1MessagesApiXml = replace(replace(replace(replace(loadTextContent('apim_policies/OpenAIv1Messages_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), '__SECONDARY_MODELS__', secondaryModelList)
 
 // Catalog API policy: static return-response, no backend.
 // Sentinels replaced: __ALLOWED_CLIENT_IPS__ (IP filter) and __CATALOG_JSON__ (model list body).
