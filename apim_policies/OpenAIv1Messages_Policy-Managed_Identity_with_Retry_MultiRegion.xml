@@ -35,9 +35,11 @@
         <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
     </inbound>
     <backend>
-        <retry condition="@(context.Response.StatusCode == 404 || context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)" count="5" interval="1" delta="1" max-interval="8" first-fast-retry="false">
+        <!-- 404 is not retried: it means the deployment does not exist, so the
+             backend response is returned to the client unchanged. -->
+        <retry condition="@(context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)" count="5" interval="1" delta="1" max-interval="8" first-fast-retry="false">
             <choose>
-                <when condition="@(context.Response.StatusCode == 404 || context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)">
+                <when condition="@(context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)">
                     <set-backend-service backend-id="aoai-v1-messages-secondary-backend" />
                 </when>
             </choose>

@@ -110,14 +110,17 @@ Fetch the keys with
   <!-- markdownlint-disable-next-line MD013 -->
   `az cognitiveservices model list -l <region> --query "[?contains(model.name,'claude')].model.name" -o tsv`
   before adding entries.
-- **Anthropic retry policy does NOT retry on 404.** A 404 from primary
+- **Inference retry policies do NOT retry on 404.** A 404 from primary
   (eastus2) means the deployment does not exist there — failing over to
   secondary (eastus) is counterproductive because eastus carries fewer
-  models. The retry condition in
-  `apim_policies/Anthropic_Policy-Managed_Identity_with_Retry_MultiRegion.xml`
+  models, and once a retry switches to the secondary the policy never
+  returns to the primary, so the secondary's 404 hides the real error
+  (for example a 429 from eastus2). The retry condition in all three of
+  `apim_policies/{AOAI,OpenAIv1Messages,Anthropic}_Policy-Managed_Identity_with_Retry_MultiRegion.xml`
   only retries on 429 (rate limit) and 5xx (server errors). Do not add 404
-  back without first verifying the target model exists in the secondary
-  region's AI Foundry catalog.
+  back. Do not add `<base />` to the `<backend>` section either: APIM
+  allows one backend policy, and `<base />` plus `<retry>` fails deploy
+  validation (see `7b299f5`, which also reverted this fix by accident).
 - **APIM authenticates to AI Foundry via system-assigned managed identity**
   (no API keys to backends). End-users authenticate to APIM via APIM
   subscription keys.

@@ -293,9 +293,10 @@ additionally include:
 
 - **Managed Identity auth**: APIM authenticates to AI Foundry backends
   using its system-assigned identity
-- **Retry & failover**: Retry on `404`, `429`, and `5xx`; on persistent
+- **Retry & failover**: Retry on `429` and `5xx`; on persistent
   failure, fail over from the primary backend to the secondary backend in
-  the other region.
+  the other region. A `404` means the deployment does not exist and is
+  returned to the client unchanged.
 - **Token metrics**: Each LLM API policy emits per-request token metrics to
   Application Insights via `<llm-emit-token-metric>` (or the AOAI-specific
   `<azure-openai-emit-token-metric>` variant) with dimensions for API ID,
