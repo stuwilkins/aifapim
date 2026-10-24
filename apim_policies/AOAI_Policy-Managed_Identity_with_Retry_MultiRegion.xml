@@ -19,8 +19,9 @@
             return &quot;&quot;;
         }" />
         <!-- Fail over to the secondary region only for models deployed there.
-             __SECONDARY_MODELS__ is substituted at deploy time by aifapim.bicep
-             as '|name|name|...' from modelDeployments[0]. -->
+             aifapim.bicep fills in the model list below at deploy time, as
+             '|name|name|...' from modelDeployments[0]. The placeholder is
+             replaced everywhere it appears, so it must stay out of comments. -->
         <set-variable name="canFailover" value="@{
             var model = (string)context.Variables.GetValueOrDefault(&quot;deploymentName&quot;, &quot;&quot;);
             return model.Length &gt; 0 &amp;&amp; &quot;__SECONDARY_MODELS__&quot;.Contains(&quot;|&quot; + model + &quot;|&quot;);
