@@ -6,8 +6,11 @@
       __ALLOWED_CLIENT_IPS__
     </ip-filter>
     <!-- Static return-response: no backend call is made. The catalog body is
-         baked in at deploy time via the __CATALOG_JSON__ sentinel, which
-         aifapim.bicep replaces with the contents of model-catalog.json. -->
+         baked in at deploy time: aifapim.bicep replaces the sentinel in the
+         set-body element below with the XML-escaped contents of
+         model-catalog.json. The sentinel must appear only in set-body: it
+         is replaced everywhere, and the catalog text is not valid inside an
+         XML comment. -->
     <return-response>
       <set-status code="200" reason="OK" />
       <set-header name="Content-Type" exists-action="override">

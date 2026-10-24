@@ -137,7 +137,10 @@ var openaiV1MessagesApiXml = replace(replace(replace(replace(loadTextContent('ap
 
 // Catalog API policy: static return-response, no backend.
 // Sentinels replaced: __ALLOWED_CLIENT_IPS__ (IP filter) and __CATALOG_JSON__ (model list body).
-var catalogApiXml = replace(replace(loadTextContent('apim_policies/Catalog_Policy.xml'), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__CATALOG_JSON__', catalogJson)
+// The JSON is XML-escaped (& first) because it lands in element text; APIM
+// unescapes it, so the response body is the original JSON.
+var catalogJsonXml = replace(replace(replace(catalogJson, '&', '&amp;'), '<', '&lt;'), '>', '&gt;')
+var catalogApiXml = replace(replace(loadTextContent('apim_policies/Catalog_Policy.xml'), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__CATALOG_JSON__', catalogJsonXml)
 
 // Azure OpenAI data-plane inference spec is pinned locally so deployments are
 // deterministic and do not depend on github.com being reachable at deploy time.
