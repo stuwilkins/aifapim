@@ -317,6 +317,18 @@ module logAnalyticsWorkspace 'modules/log-analytics-workspace.bicep' = {
   }
 }
 
+// Event Hub namespace is private-endpoint only. The endpoint goes in the openai
+// subnet of regions[0], the VNet that also holds the APIM subnet, and its
+// privatelink.servicebus.windows.net zone is linked to that VNet.
+module eventHubPrivateDnsZone 'modules/private-dns-zone.bicep' = {
+  name: 'privatelink-servicebus-windows-net'
+  params: {
+    zoneName: 'privatelink.servicebus.windows.net'
+    vnetId: vnet[0].outputs.vnetId
+    tags: tags
+  }
+}
+
 module eventHub 'modules/event-hub.bicep' = {
   name: 'event-hub'
   params: {
@@ -324,6 +336,9 @@ module eventHub 'modules/event-hub.bicep' = {
     eventHubNamespaceName: eventHubNamespaceName
     eventHubName: eventHubName
     tags: tags
+    subnetId: vnet[0].outputs.subnetIds.openai
+    privateDnsZoneId: eventHubPrivateDnsZone.outputs.zoneId
+    privateEndpointLocation: regions[0].name
   }
 }
 
@@ -460,7 +475,7 @@ module api 'modules/api.bicep' = {
   }
 }
 
-resource eventHubNamespaceParent 'Microsoft.EventHub/namespaces@2021-01-01-preview' existing = {
+resource eventHubNamespaceParent 'Microsoft.EventHub/namespaces@2024-01-01' existing = {
   name: eventHubNamespaceName
 }
 

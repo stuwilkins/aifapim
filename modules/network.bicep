@@ -294,6 +294,23 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2020-05-01' = {
         }
       }
       {
+        // The Event Hub namespace is reached through a private endpoint in the
+        // VNet (modules/event-hub.bicep), so AMQP no longer matches the
+        // EventHub service tag rule above and falls under the lateral deny.
+        name: 'Allow_Outbound_AMQP_To_Private_Endpoints'
+        properties: {
+          description: 'Allow APIM outbound AMQP (TCP 5671-5672) to the Event Hub private endpoint.'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '5671-5672'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+          access: 'Allow'
+          priority: 330
+          direction: 'Outbound'
+        }
+      }
+      {
         name: 'Deny_Lateral_Outbound_VirtualNetwork'
         properties: {
           description: 'Deny outbound lateral management connections from non-management hosts (Azure.NSG.LateralTraversal).'

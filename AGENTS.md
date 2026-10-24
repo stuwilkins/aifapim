@@ -153,6 +153,18 @@ Fetch the keys with
   the specific path APIM needs. **Do not remove either rule without
   understanding the dependency** — removing the allow rule causes all backend
   requests to hang silently; removing the deny rule breaks PSRule compliance.
+  The same pattern covers the rest of APIM's lateral traffic, each rule at a
+  lower priority number than the deny: node-to-node cache (TCP 6381-6383, 310)
+  and rate-limit counter sync (UDP 4290, 320), which matter once the service
+  has more than one unit (Premium), and AMQP (TCP 5671-5672, 330) to the Event
+  Hub private endpoint.
+- **Event Hub**: `modules/event-hub.bicep` creates a namespace with local auth
+  and public network access disabled, reached only through a private endpoint
+  (group `namespace`) in the `openai` subnet of `regions[0]` and registered in
+  `privatelink.servicebus.windows.net`, linked to that VNet. Private endpoints
+  need the Standard or Premium SKU. The namespace and the APIM Data Sender role
+  are provisioned, but no APIM logger sends to it yet (only the Application
+  Insights logger exists); it is not used by `aifapim-config`.
 - **Custom TLS**: Certificates must be stored as **secrets** (not
   certificates) in Key Vault. A user-assigned managed identity is created and
   granted Key Vault Secrets User *before* APIM is deployed to solve the
@@ -182,12 +194,12 @@ modules/
   api.bicep                     # All three APIs, backends, product, diagnostics
   app-insights.bicep            # Application Insights
   cognitive-services-role.bicep # Cognitive Services / AI User RBAC for APIM system identity
-  event-hub.bicep               # Event Hub for APIM logging
+  event-hub.bicep               # Event Hub namespace (private endpoint only; not wired to an APIM logger yet)
   keyvault-role.bicep           # Key Vault RBAC for APIM user-assigned identity
   llm-latency-alerts.bicep      # Scheduled-query latency alerts on ApiManagementGatewayLogs
   log-analytics-workspace.bicep # Log Analytics workspace
   network.bicep                 # APIM subnet (added to regions[0] vnet)
-  private-dns-zone.bicep        # Private DNS zone for AI Foundry endpoints
+  private-dns-zone.bicep        # Private DNS zone (AI Foundry endpoints, Event Hub)
   vnet.bicep                    # Virtual network
 apim_policies/                  # APIM policy XML (loaded inline via loadTextContent)
                                 #   Catalog_Policy.xml  (return-response; no backend)

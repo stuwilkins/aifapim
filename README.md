@@ -252,12 +252,12 @@ modules/
   api.bicep                     # API definitions, backends, product, diagnostics
   app-insights.bicep            # Application Insights
   cognitive-services-role.bicep # Cognitive Services / AI User RBAC for APIM system identity
-  event-hub.bicep               # Event Hub for APIM logging
+  event-hub.bicep               # Event Hub namespace (private endpoint only; not wired to an APIM logger yet)
   keyvault-role.bicep           # Key Vault RBAC for APIM user-assigned identity
   llm-latency-alerts.bicep      # Scheduled-query latency alerts on ApiManagementGatewayLogs
   log-analytics-workspace.bicep # Log Analytics workspace
   network.bicep                 # APIM subnet
-  private-dns-zone.bicep        # Private DNS zone for AI Foundry endpoints
+  private-dns-zone.bicep        # Private DNS zone (AI Foundry endpoints, Event Hub)
   role.bicep                    # Generic role-assignment helper
   vnet.bicep                    # Virtual network
 apim_policies/
