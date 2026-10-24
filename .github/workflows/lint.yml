@@ -6,6 +6,7 @@
 #   pull_request      -> files changed vs. the PR base (origin/main).
 #   push to main      -> files changed in the push (before..HEAD).
 #   workflow_dispatch -> all files (safe fallback).
+#   push creating a branch (before = all zeros) -> all files, same fallback.
 #
 # Secrets: the pre-commit gitleaks hook only scans staged changes, which a CI
 # checkout never has, so it is skipped here and a dedicated step scans the
@@ -55,10 +56,12 @@ jobs:
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
             echo "from_ref=origin/${BASE_REF}" >> "$GITHUB_OUTPUT"
             echo "to_ref=${SHA}"               >> "$GITHUB_OUTPUT"
-          elif [[ "$EVENT_NAME" == "push" ]]; then
+          elif [[ "$EVENT_NAME" == "push" && -n "$BEFORE" && ! "$BEFORE" =~ ^0+$ ]]; then
             echo "from_ref=${BEFORE}"          >> "$GITHUB_OUTPUT"
             echo "to_ref=${SHA}"               >> "$GITHUB_OUTPUT"
           else
+            # workflow_dispatch, or a push that creates the branch (BEFORE is
+            # all zeros): no usable range, so lint all files / scan everything.
             echo "from_ref=" >> "$GITHUB_OUTPUT"
             echo "to_ref="   >> "$GITHUB_OUTPUT"
           fi
@@ -111,8 +114,7 @@ jobs:
           TO_REF: ${{ steps.refs.outputs.to_ref }}
         run: |
           set -euo pipefail
-          # An all-zero FROM_REF is a push that creates the branch: scan everything.
-          if [[ -n "$FROM_REF" && ! "$FROM_REF" =~ ^0+$ ]]; then
+          if [[ -n "$FROM_REF" ]]; then
             gitleaks git --redact --verbose --log-opts="${FROM_REF}..${TO_REF}"
           else
             gitleaks git --redact --verbose
@@ -135,7 +137,7 @@ jobs:
           if [[ -n "$FROM_REF" ]]; then
             SCOPE="\`${FROM_REF}\`..\`${TO_REF}\`"
           else
-            SCOPE="all files (workflow_dispatch)"
+            SCOPE="all files (no commit range: manual run or new branch)"
           fi
 
           {
