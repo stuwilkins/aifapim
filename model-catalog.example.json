@@ -1,0 +1,16 @@
+[
+  {
+    "id": "claude-sonnet-4-5",
+    "name": "Claude Sonnet 4.5",
+    "provider": "Anthropic",
+    "context": 200000,
+    "output": 64000
+  },
+  {
+    "id": "gpt-4.1-mini",
+    "name": "GPT-4.1 Mini",
+    "provider": "OpenAI",
+    "context": 1047576,
+    "output": 32768
+  }
+]

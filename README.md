@@ -202,7 +202,9 @@ $EDITOR aifapim-prod.bicepparam   # fill in your values
 The example file is fully commented; each parameter explains its purpose,
 valid values, and any gotchas. Pay particular attention to `allowedClientIps`
 (the inbound IP allow-list — RFC 5737 documentation IPs in the example will
-not allow real traffic) and the `regions` / `modelDeployments` arrays.
+not allow real traffic), the `regions` / `modelDeployments` arrays, and
+`catalogJson` (the example loads `model-catalog.example.json`; point it at a
+catalog that matches your deployments).
 
 ### Deploy everything (AI Foundry + APIM)
 
@@ -241,6 +243,7 @@ Pay particular attention to:
 ```text
 aifapim.bicep                   # Main deployment orchestrator
 aifapim.example.bicepparam      # Parameter file template — copy and customize per environment
+model-catalog.example.json      # Example GET /catalog body, loaded by the example parameter file
 llm-token-usage-workbook.bicep  # Azure Monitor workbook for LLM token usage analytics
 modules/
   aif.bicep                     # AI Foundry (AIServices) account + private endpoint
@@ -311,7 +314,8 @@ additionally include:
 The **catalog** policy (`Catalog_Policy.xml`) uses `<return-response>` in
 `<inbound>` — no backend is contacted, so managed identity auth, retry, and
 token metrics do not apply. The catalog JSON body is baked in at deploy time
-via the `__CATALOG_JSON__` sentinel.
+via the `__CATALOG_JSON__` sentinel (XML-escaped by `aifapim.bicep`; the
+sentinel must appear only in `<set-body>`, never in a comment).
 
 ### Authentication model
 

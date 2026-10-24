@@ -100,6 +100,13 @@ param allowedClientIps = [
   '203.0.113.0/24'     // example /24 (TEST-NET-3)
 ]
 
+// ---- Model catalog ----
+// JSON array served by GET /catalog (id/name/provider/context/output per
+// chat-LLM model), baked into the catalog policy at deploy time. Replace the
+// example with a catalog that matches modelDeployments below; context and
+// output windows must come from the vendor model cards.
+param catalogJson = loadTextContent('./model-catalog.example.json')
+
 // ---- Regions ----
 // Two-region multi-region deployment. regions[1] is the *primary* backend;
 // regions[0] is the failover. vnetAddressPrefix and openAiSubnetPrefix must
