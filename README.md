@@ -296,12 +296,12 @@ additionally include:
 
 - **Managed Identity auth**: APIM authenticates to AI Foundry backends
   using its system-assigned identity
-- **Retry & failover**: Retry on `429` and `5xx` (including connection
-  resets). Failover from the primary backend to the secondary backend in
-  the other region happens only for models deployed in the secondary
-  region (the `__SECONDARY_MODELS__` sentinel, built from
-  `modelDeployments[0]`); other models, such as the Claude models that exist
-  only in `eastus2`, retry against the primary. A `404` means the
+- **Retry & failover**: Retry on `429` and `5xx` responses (a failure that
+  returns no response is not retried). Failover from the primary backend to
+  the secondary backend in the other region happens only for models
+  deployed in the secondary region (the `__SECONDARY_MODELS__` sentinel,
+  built from `modelDeployments[0]`); other models, such as the Claude models
+  that exist only in `eastus2`, retry against the primary. A `404` means the
   deployment does not exist and is returned to the client unchanged.
 - **Token metrics**: Each LLM API policy emits per-request token metrics to
   Application Insights via `<llm-emit-token-metric>` (or the AOAI-specific

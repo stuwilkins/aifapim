@@ -85,10 +85,11 @@ resource parentAPIM 'Microsoft.ApiManagement/service@2023-03-01-preview' existin
 // resource below is chained via `dependsOn` so they land sequentially rather
 // than fan-out in parallel. The chain order is documented inline at each
 // resource. Do NOT remove the `dependsOn` edges without a replacement
-// serialization strategy — they look redundant under `parent:` but are not:
-// `parent:` is a referential edge, `dependsOn:` is what ARM uses to serialize
-// the actual control-plane operations. See aifapim AGENTS.md "Developer SKU
-// ServiceLocked race".
+// serialization strategy. A `parent:` already adds an implicit dependency on
+// the parent, so repeating the parent in `dependsOn` orders nothing; the
+// edges that serialize the writes are the ones between SIBLING resources
+// (backend to backend, API to API, policy to diagnostic, and so on). See
+// aifapim AGENTS.md "Developer SKU ServiceLocked race".
 
 resource primarybackend 'Microsoft.ApiManagement/service/backends@2023-03-01-preview' = {
   name: 'aoai-primary-backend'
@@ -278,7 +279,7 @@ resource openaiV1MessagesApi 'Microsoft.ApiManagement/service/apis@2023-03-01-pr
   dependsOn: [diagnostic]
   properties: {
     displayName: openaiV1MessagesApiDisplayName
-    description: 'Azure OpenAI v1 Messages-compatible API. Translates OpenAI Messages format to Azure OpenAI data-plane calls.'
+    description: 'Azure OpenAI v1 API: Responses, embeddings and model listing, forwarded to the Azure OpenAI v1 data plane.'
     path: openaiV1MessagesApiPath
     protocols: [
       'https'
@@ -296,15 +297,11 @@ resource openaiV1MessagesApi 'Microsoft.ApiManagement/service/apis@2023-03-01-pr
 resource openaiV1MessagesApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2023-03-01-preview' = {
   parent: openaiV1MessagesApi
   name: 'policy'
-  // Backend deps are pre-existing referential requirements. The
-  // openaiV1MessagesApi dep is part of the explicit serialization chain
-  // (see header comment); the linter flags it as redundant under `parent:`
-  // but that conflates the two edge types — see header.
+  // The backends are siblings the policy refers to; the parent API is an
+  // implicit dependency through `parent:` and is not repeated here.
   dependsOn: [
     openaiV1MessagesPrimaryBackend
     openaiV1MessagesSecondaryBackend
-    #disable-next-line no-unnecessary-dependson
-    openaiV1MessagesApi
   ]
   properties: {
     format: 'xml'

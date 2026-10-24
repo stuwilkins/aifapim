@@ -290,12 +290,12 @@ Two interventions in this repo prevent the race:
 2. **Linear `dependsOn` serialization** in `modules/api.bicep`. Every child
    resource is chained so backends → APIs → policies → diagnostics →
    product → product/api links land sequentially, not in parallel. The
-   chain is documented inline at each resource. The edges look redundant
-   under `parent:` to the bicep linter — `parent:` is a referential edge,
-   `dependsOn:` is what ARM uses to order the actual control-plane writes.
-   Do NOT remove them without a replacement serialization strategy. The
-   one place this trips the linter (`openaiV1MessagesApiPolicy` depending
-   on its own parent API) carries an inline `#disable-next-line`.
+   chain is documented inline at each resource. The edges that serialize
+   the writes are the ones between sibling resources; a `parent:` already
+   adds an implicit dependency on the parent, so listing the parent again
+   in `dependsOn` (which the bicep linter flags) adds no ordering and is
+   left out. Do NOT remove the sibling edges without a replacement
+   serialization strategy.
 
 Tradeoff: deploys are slower (sequential child writes against a single
 APIM unit) in exchange for determinism. On Standard/Premium tiers with
