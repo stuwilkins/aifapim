@@ -297,11 +297,19 @@
                   "enum": ["embedding"]
                 },
                 "embedding": {
-                  "type": "array",
-                  "items": {
-                    "type": "number"
-                  },
-                  "description": "The embedding vector."
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    },
+                    {
+                      "type": "string",
+                      "description": "Base64-encoded vector, returned when encoding_format is base64."
+                    }
+                  ],
+                  "description": "The embedding vector: an array of numbers, or a base64 string when encoding_format is base64."
                 }
               }
             }
