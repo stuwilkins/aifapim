@@ -14,7 +14,7 @@ codespell  = "==2.4.2"
 [feature.dev.tasks]
 lint       = "pre-commit run --all-files"
 lint-files = "pre-commit run --files"
-lint-psrule = "pre-commit run --hook-stage manual psrule"
+lint-psrule = "pre-commit run --hook-stage manual --all-files psrule"
 
 [environments]
 default = { solve-group = "default" }
