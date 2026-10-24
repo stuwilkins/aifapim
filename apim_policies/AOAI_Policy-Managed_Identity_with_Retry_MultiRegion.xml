@@ -21,7 +21,14 @@
         <!-- Fail over to the secondary region only for models deployed there.
              aifapim.bicep fills in the model list below at deploy time, as
              '|name|name|...' from modelDeployments[0]. The placeholder is
-             replaced everywhere it appears, so it must stay out of comments. -->
+             replaced everywhere it appears, so it must stay out of comments.
+             Model listing and retrieval requests (GET .../models and
+             .../models/{id}) carry no model name here, so canFailover is
+             false for them on purpose: each region lists only its own
+             models, so a failover would return the secondary's shorter list
+             and clients would think the primary-only models had gone. A
+             connection reset or 5xx on those routes is retried on the
+             primary instead. -->
         <set-variable name="canFailover" value="@{
             var model = (string)context.Variables.GetValueOrDefault(&quot;deploymentName&quot;, &quot;&quot;);
             return model.Length &gt; 0 &amp;&amp; &quot;__SECONDARY_MODELS__&quot;.Contains(&quot;|&quot; + model + &quot;|&quot;);
