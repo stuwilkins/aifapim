@@ -262,6 +262,38 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2020-05-01' = {
         }
       }
       {
+        // The inbound rules above (priorities 220/230) only admit this traffic
+        // on the receiving node; the sending node's outbound side must allow
+        // it too, or the lateral deny below drops it. Matters when the service
+        // has more than one unit (Premium); harmless otherwise.
+        name: 'Allow_Outbound_Redis_Cache_Between_Machines'
+        properties: {
+          description: 'Allow APIM nodes to reach each other for cache policies (TCP 6381-6383).'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '6381-6383'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+          access: 'Allow'
+          priority: 310
+          direction: 'Outbound'
+        }
+      }
+      {
+        name: 'Allow_Outbound_Rate_Limit_Counter_Sync_Between_Machines'
+        properties: {
+          description: 'Allow APIM nodes to sync rate-limit counters (UDP 4290).'
+          protocol: 'Udp'
+          sourcePortRange: '*'
+          destinationPortRange: '4290'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+          access: 'Allow'
+          priority: 320
+          direction: 'Outbound'
+        }
+      }
+      {
         name: 'Deny_Lateral_Outbound_VirtualNetwork'
         properties: {
           description: 'Deny outbound lateral management connections from non-management hosts (Azure.NSG.LateralTraversal).'
