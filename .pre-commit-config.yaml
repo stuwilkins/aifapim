@@ -83,7 +83,11 @@ repos:
         name: PSRule for Azure (manual)
         language: system
         stages: [manual]
+        # Assert-PSRule with -ErrorAction Stop exits non-zero when a rule
+        # fails (Invoke-PSRule only returns the results, so the hook would
+        # always pass). -Format File is needed for Bicep expansion.
         entry: pwsh -NoProfile -Command
-          "Invoke-PSRule -Module PSRule.Rules.Azure
-          -InputPath . -Option ps-rule.yaml -Outcome Fail,Error"
+          "Assert-PSRule -Module PSRule.Rules.Azure -Format File
+          -InputPath . -Option ps-rule.yaml -Outcome Fail,Error
+          -ErrorAction Stop"
         pass_filenames: false

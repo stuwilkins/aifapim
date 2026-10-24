@@ -2,7 +2,10 @@
 # PSRule for Azure configuration.
 # Docs: https://azure.github.io/PSRule.Rules.Azure/
 #
-# Bicep files are automatically expanded to ARM JSON for analysis.
+# The stack is analysed through the parameter file: .bicepparam files are
+# expanded to ARM JSON (aifapim.example.bicepparam uses aifapim.bicep). Bare
+# .bicep files are not expanded; aifapim.bicep and the reference workbook have
+# required parameters without defaults and cannot be expanded on their own.
 # Run manually in-sandbox: pixi run -e dev lint-psrule
 # CI: .github/workflows/psrule.yml (advisory — SARIF only, does not fail build)
 
@@ -25,7 +28,8 @@ input:
     - "*.yml"
 
 configuration:
-  AZURE_BICEP_FILE_EXPANSION: true
+  AZURE_BICEP_FILE_EXPANSION: false
+  AZURE_BICEP_PARAMS_FILE_EXPANSION: true
   AZURE_BICEP_FILE_EXPANSION_TIMEOUT: 120
 
 baseline:
@@ -45,6 +49,11 @@ rule:
     # N/A for the current Standard SKU (zone redundancy opt-in not available
     # in all regions and requires namespace-level migration).
     - Azure.EventHub.AvailabilityZone
+    # The inference policies deliberately have no <base /> in <backend>: APIM
+    # allows one backend policy and <base /> plus <retry> fails deploy
+    # validation (see AGENTS.md). The catalog policy has none in <inbound>, as
+    # it only filters by IP and returns a static body.
+    - Azure.APIM.PolicyBase
     # Defender for APIs requires subscription-level enablement of the
     # Microsoft.Security/defenderForApisComponents plan — not a Bicep
     # resource property. Enable at the subscription level separately.
