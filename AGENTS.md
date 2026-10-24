@@ -8,9 +8,28 @@ documented under "Verification via examples" below.
 
 ## What this repo is
 
-Pure Bicep IaC. There is no `npm install`, no Python package, no lint/typecheck
-step, and no CI. Changes are applied by running `az deployment group create`
-manually.
+Pure Bicep IaC. There is no `npm install`, no Python package and no
+automated test suite. CI only validates the repo: a lint gate
+(`.github/workflows/lint.yml`, the committed pre-commit hooks) and an advisory
+PSRule for Azure analysis (`.github/workflows/psrule.yml`). Nothing is
+deployed by CI: changes are applied by running `az deployment group create`
+manually, and post-deploy checks are the smoke test described under
+"Verification via examples/test-apim.py".
+
+### Lint and static analysis
+
+Run these before committing; CI repeats the lint on changed files.
+
+```bash
+pixi run --frozen -e dev lint-files <file1> <file2> ...   # changed files
+pixi run --frozen -e dev lint                             # everything
+pixi run -e dev lint-psrule                               # PSRule, manual
+```
+
+`lint-psrule` needs `pwsh`, the `PSRule.Rules.Azure` module and the Bicep
+CLI, and fails when a rule fails. It expands the stack through
+`aifapim.example.bicepparam`; rules that do not apply are excluded in
+`ps-rule.yaml` with the reason.
 
 ## Deployment commands
 
@@ -390,8 +409,9 @@ same resource group so it can resolve the APIM service by this naming pattern.
 
 ## Verification via examples/test-apim.py
 
-There is no automated test suite or CI. Post-deploy verification is driven by
-a single smoke-test script: `examples/test-apim.py`.
+There is no automated test suite, and CI does not deploy or call the gateway
+(it only lints and runs PSRule). Post-deploy verification is driven by a
+single smoke-test script: `examples/test-apim.py`.
 
 `examples/test-apim.py` exercises every public API surface using a
 subscription key from `AIFAPIM_API_KEY`:
