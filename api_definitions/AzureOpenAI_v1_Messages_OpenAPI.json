@@ -78,6 +78,74 @@
         }
       }
     },
+    "/v1/images/generations": {
+      "post": {
+        "operationId": "createImage",
+        "summary": "Create an image",
+        "description": "Generates one or more images from a text prompt. Set model to the deployment name of an image model, for example FLUX.2-pro.",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateImageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImagesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/images/edits": {
+      "post": {
+        "operationId": "createImageEdit",
+        "summary": "Edit an image",
+        "description": "Edits or extends an image from a text prompt and one or more input images. Set model to the deployment name of an image model that supports edits, for example FLUX.2-pro or FLUX.1-Kontext-pro.",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateImageEditRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImagesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/models": {
       "get": {
         "operationId": "listModels",
@@ -323,6 +391,107 @@
               },
               "total_tokens": {
                 "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "CreateImageRequest": {
+        "type": "object",
+        "required": ["model", "prompt"],
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "The deployment name of the image model, for example FLUX.2-pro."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "A text description of the desired image."
+          },
+          "n": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "The number of images to generate."
+          },
+          "size": {
+            "type": "string",
+            "example": "1024x1024",
+            "description": "The size of the generated images."
+          },
+          "output_format": {
+            "type": "string",
+            "description": "The image file format, for example png or jpeg."
+          },
+          "user": {
+            "type": "string",
+            "description": "A unique identifier representing the end user."
+          }
+        },
+        "additionalProperties": true
+      },
+      "CreateImageEditRequest": {
+        "type": "object",
+        "required": ["model", "prompt", "image"],
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "The deployment name of the image model, for example FLUX.2-pro."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "A text description of the desired edit."
+          },
+          "image": {
+            "type": "string",
+            "format": "binary",
+            "description": "The image to edit."
+          },
+          "mask": {
+            "type": "string",
+            "format": "binary",
+            "description": "Optional mask image. Not every image model supports a mask."
+          },
+          "n": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "The number of images to generate."
+          },
+          "size": {
+            "type": "string",
+            "description": "The size of the generated images."
+          },
+          "user": {
+            "type": "string",
+            "description": "A unique identifier representing the end user."
+          }
+        }
+      },
+      "ImagesResponse": {
+        "type": "object",
+        "required": ["created", "data"],
+        "properties": {
+          "created": {
+            "type": "integer",
+            "description": "The unix timestamp when the images were created."
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "b64_json": {
+                  "type": "string",
+                  "description": "The base64 encoded image."
+                },
+                "url": {
+                  "type": "string",
+                  "description": "The image URL, when the model returns one."
+                },
+                "revised_prompt": {
+                  "type": "string"
+                }
               }
             }
           }

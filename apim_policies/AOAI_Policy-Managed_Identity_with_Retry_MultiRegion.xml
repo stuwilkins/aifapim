@@ -33,6 +33,12 @@
             var model = (string)context.Variables.GetValueOrDefault(&quot;deploymentName&quot;, &quot;&quot;);
             return model.Length &gt; 0 &amp;&amp; &quot;__SECONDARY_MODELS__&quot;.Contains(&quot;|&quot; + model + &quot;|&quot;);
         }" />
+        <!-- Image requests (paths containing /images/) carry no token usage:
+             the token limit and token metric policies are built for text and
+             are skipped for them. Image requests are counted in outbound. -->
+        <set-variable name="isImageRequest" value="@(context.Request.Url.Path.Contains(&quot;/images/&quot;))" />
+        <choose>
+            <when condition="@(!context.Variables.GetValueOrDefault&lt;bool&gt;(&quot;isImageRequest&quot;, false))">
         <!-- Emit token metrics with the deployment ID as a dimension -->
         <azure-openai-token-limit tokens-per-minute="10000000" counter-key="@(context.Subscription.Id)" estimate-prompt-tokens="true" tokens-consumed-header-name="consumed-tokens" remaining-tokens-header-name="remaining-tokens" />
         <azure-openai-emit-token-metric>
@@ -47,6 +53,8 @@
             <dimension name="Model" value="@((string)context.Variables.GetValueOrDefault(&quot;deploymentId&quot;, &quot;&quot;))" />
             <dimension name="X-Forwarded-For" value="@(context.Request.Headers.GetValueOrDefault(&quot;X-Forwarded-For&quot;, context.Request.IpAddress))" />
         </azure-openai-emit-token-metric>
+            </when>
+        </choose>
         <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
     </inbound>
     <backend>
@@ -67,6 +75,29 @@
     </backend>
     <outbound>
         <base />
+        <!-- Count generated images per model. Successful image requests only;
+             the value is the number of images in the response data. -->
+        <choose>
+            <when condition="@(context.Variables.GetValueOrDefault&lt;bool&gt;(&quot;isImageRequest&quot;, false) &amp;&amp; context.Response.StatusCode == 200)">
+                <emit-metric name="Image Count" value="@{
+                    try {
+                        var body = context.Response.Body.As&lt;JObject&gt;(preserveContent: true);
+                        var data = body[&quot;data&quot;] as JArray;
+                        return data != null ? (double)data.Count : 1.0;
+                    } catch {
+                        return 1.0;
+                    }
+                }" namespace="__METRIC_NAMESPACE__">
+                    <dimension name="API ID" />
+                    <dimension name="Subscription ID" />
+                    <dimension name="Subscription Name" value="@(context.Subscription.Name)" />
+                    <dimension name="User ID" />
+                    <dimension name="Product ID" />
+                    <dimension name="Model" value="@((string)context.Variables.GetValueOrDefault(&quot;deploymentName&quot;, &quot;&quot;))" />
+                    <dimension name="X-Forwarded-For" value="@(context.Request.Headers.GetValueOrDefault(&quot;X-Forwarded-For&quot;, context.Request.IpAddress))" />
+                </emit-metric>
+            </when>
+        </choose>
     </outbound>
     <on-error>
         <base />

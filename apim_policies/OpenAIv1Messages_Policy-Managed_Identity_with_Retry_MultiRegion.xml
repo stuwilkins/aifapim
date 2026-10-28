@@ -10,8 +10,17 @@
         <!-- Extract the model name from the JSON request body. preserveContent=true
              keeps the body intact for the upstream call. Used as the Model dimension
              on the token metric below. -->
+        <set-variable name="isImageRequest" value="@(context.Request.Url.Path.Contains(&quot;/images/&quot;))" />
+        <!-- Image edits arrive as multipart form data, not JSON, so the model
+             field is read from the form text when the body is not JSON. -->
         <set-variable name="requestModel" value="@{
             try {
+                var contentType = context.Request.Headers.GetValueOrDefault(&quot;Content-Type&quot;, &quot;&quot;);
+                if (contentType.StartsWith(&quot;multipart/form-data&quot;, StringComparison.OrdinalIgnoreCase)) {
+                    var text = context.Request.Body.As&lt;string&gt;(preserveContent: true);
+                    var m = System.Text.RegularExpressions.Regex.Match(text, &quot;name=\&quot;model\&quot;\\r?\\n\\r?\\n([^\\r\\n]+)&quot;);
+                    return m.Success ? m.Groups[1].Value.Trim() : &quot;&quot;;
+                }
                 var body = context.Request.Body.As&lt;JObject&gt;(preserveContent: true);
                 return (string)body[&quot;model&quot;] ?? &quot;&quot;;
             } catch {
@@ -33,6 +42,11 @@
             var model = (string)context.Variables.GetValueOrDefault(&quot;requestModel&quot;, &quot;&quot;);
             return model.Length &gt; 0 &amp;&amp; &quot;__SECONDARY_MODELS__&quot;.Contains(&quot;|&quot; + model + &quot;|&quot;);
         }" />
+        <!-- Image requests carry no token usage: the token limit and token
+             metric policies are built for text and are skipped for them.
+             Image requests are counted in outbound. -->
+        <choose>
+            <when condition="@(!context.Variables.GetValueOrDefault&lt;bool&gt;(&quot;isImageRequest&quot;, false))">
         <llm-token-limit tokens-per-minute="10000000" counter-key="@(context.Subscription.Id)" estimate-prompt-tokens="true" tokens-consumed-header-name="consumed-tokens" remaining-tokens-header-name="remaining-tokens" />
         <!-- Emit token metrics under a custom namespace, parallel to the
              Anthropic policy. Captures the Model dimension explicitly so that
@@ -47,6 +61,8 @@
             <dimension name="Model" value="@((string)context.Variables.GetValueOrDefault(&quot;requestModel&quot;, &quot;&quot;))" />
             <dimension name="X-Forwarded-For" value="@(context.Request.Headers.GetValueOrDefault(&quot;X-Forwarded-For&quot;, context.Request.IpAddress))" />
         </llm-emit-token-metric>
+            </when>
+        </choose>
         <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
     </inbound>
     <backend>
@@ -66,6 +82,29 @@
     </backend>
     <outbound>
         <base />
+        <!-- Count generated images per model. Successful image requests only;
+             the value is the number of images in the response data. -->
+        <choose>
+            <when condition="@(context.Variables.GetValueOrDefault&lt;bool&gt;(&quot;isImageRequest&quot;, false) &amp;&amp; context.Response.StatusCode == 200)">
+                <emit-metric name="Image Count" value="@{
+                    try {
+                        var body = context.Response.Body.As&lt;JObject&gt;(preserveContent: true);
+                        var data = body[&quot;data&quot;] as JArray;
+                        return data != null ? (double)data.Count : 1.0;
+                    } catch {
+                        return 1.0;
+                    }
+                }" namespace="__METRIC_NAMESPACE__">
+                    <dimension name="API ID" />
+                    <dimension name="Subscription ID" />
+                    <dimension name="Subscription Name" value="@(context.Subscription.Name)" />
+                    <dimension name="User ID" />
+                    <dimension name="Product ID" />
+                    <dimension name="Model" value="@((string)context.Variables.GetValueOrDefault(&quot;requestModel&quot;, &quot;&quot;))" />
+                    <dimension name="X-Forwarded-For" value="@(context.Request.Headers.GetValueOrDefault(&quot;X-Forwarded-For&quot;, context.Request.IpAddress))" />
+                </emit-metric>
+            </when>
+        </choose>
     </outbound>
     <on-error>
         <base />

@@ -135,8 +135,17 @@ param regions = [
 //   model     - Azure AI Foundry model id
 //   version   - model version
 //   skuName   - 'DataZoneStandard' (OpenAI/Foundry) | 'GlobalStandard' (most others)
-//   capacity  - (optional) per-deployment TPM, overrides openai/anthropicCapacity
-//   format    - (optional) 'Anthropic' | 'Meta' — required for non-OpenAI families
+//   capacity  - (optional) per-deployment TPM, overrides openai/anthropicCapacity.
+//               REQUIRED for formats other than OpenAI and Anthropic.
+//   format    - (optional) 'Anthropic' | 'Meta' | 'Black Forest Labs' — required for non-OpenAI families
+//   versionUpgradeOption - (optional) default 'OnceNewDefaultVersionAvailable'
+//
+// Image models (format 'Black Forest Labs', for example FLUX.2-pro) are quota
+// limited in requests per minute, not tokens. Their DataZoneStandard quota is
+// one pool per subscription shared by every region and account in it, so the
+// capacities of all deployments of a model must add up to that pool or less.
+// Clients reach them through POST /deployments/{name}/images/generations and
+// /edits (root API) or POST /openai/v1/images/generations and /edits.
 //
 // Anthropic models are only offered by Foundry in select regions (currently
 // eastus2); leave them out of regions[0] if that region cannot host them.
@@ -148,6 +157,15 @@ param modelDeployments = [
       model:   'gpt-4.1-mini'
       version: '2025-04-14'
       skuName: 'DataZoneStandard'
+    }
+    {
+      name:    'FLUX.2-pro'
+      model:   'FLUX.2-pro'
+      version: '1'
+      skuName: 'DataZoneStandard'
+      capacity: 10
+      format:  'Black Forest Labs'
+      versionUpgradeOption: 'NoAutoUpgrade'
     }
     {
       name:    'Llama-3.3-70B-Instruct'
@@ -165,6 +183,15 @@ param modelDeployments = [
       model:   'gpt-4.1-mini'
       version: '2025-04-14'
       skuName: 'DataZoneStandard'
+    }
+    {
+      name:    'FLUX.2-pro'
+      model:   'FLUX.2-pro'
+      version: '1'
+      skuName: 'DataZoneStandard'
+      capacity: 10
+      format:  'Black Forest Labs'
+      versionUpgradeOption: 'NoAutoUpgrade'
     }
     {
       name:    'claude-sonnet-4-5'

@@ -116,6 +116,53 @@ response = client.responses.create(
 print(response.output[0].content[0].text)
 ```
 
+### Example: Create or edit an image (FLUX)
+
+The Black Forest Labs FLUX models are deployed as `DataZoneStandard`, so
+prompts and images are processed within the US data zone. `FLUX.2-pro` and
+`FLUX.1-Kontext-pro` create and edit images; `FLUX-1.1-pro` only creates
+them. They are served under `api-version=preview`, and the images come back
+base64-encoded in `data[].b64_json`. Both gateway APIs expose them:
+
+- root API: `POST /deployments/{deployment}/images/generations` and
+  `/images/edits`
+- v1 API: `POST /openai/v1/images/generations` and `/images/edits`
+
+```python
+import base64
+import os
+
+from openai import OpenAI
+
+endpoint = f"https://{os.environ['AIFAPIM_HOST']}"
+
+client = OpenAI(
+    base_url=f"{endpoint}/openai/v1/",
+    api_key="placeholder",
+    default_headers={"x-api-key": os.environ["AIFAPIM_API_KEY"]},
+    default_query={"api-version": "preview"},
+)
+
+result = client.images.generate(
+    model="FLUX.2-pro",
+    prompt="A photograph of a red fox in an autumn forest",
+    size="1024x1024",
+)
+image = base64.b64decode(result.data[0].b64_json)
+
+edited = client.images.edit(
+    model="FLUX.2-pro",
+    image=("fox.png", image, "image/png"),
+    prompt="Make it a snowy winter scene",
+)
+```
+
+Image models are billed and limited per image, not per token: the token
+limit and token metric policies are skipped for `/images/` requests, and the
+policies emit an `Image Count` metric instead (same namespace and dimensions
+as the token metrics). They are not listed in `GET /catalog`, which holds
+chat models only.
+
 ### Example: OpenCode configuration
 
 The `examples/opencode.json` file contains a ready-to-use
@@ -312,7 +359,9 @@ additionally include:
   Subscription ID, User ID, Product ID, and Model. The metric namespace is
   the configured `apimProductName`, substituted into the policy XML at deploy
   time via the `__METRIC_NAMESPACE__` sentinel. See **Token Usage Analytics**
-  below.
+  below. Requests whose path contains `/images/` skip the token limit and
+  token metric policies (they carry no tokens) and emit an `Image Count`
+  metric on success instead.
 
 The **catalog** policy (`Catalog_Policy.xml`) uses `<return-response>` in
 `<inbound>` — no backend is contacted, so managed identity auth, retry, and

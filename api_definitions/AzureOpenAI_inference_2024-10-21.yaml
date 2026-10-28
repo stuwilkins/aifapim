@@ -373,6 +373,48 @@ paths:
       x-ms-examples:
         Create an image.:
           $ref: ./examples/image_generation.yaml
+  # Local addition (not in upstream): image edits. The upstream 2024-10-21
+  # data-plane spec only has image generations. Foundry image models that
+  # edit images (FLUX.2-pro, FLUX.1-Kontext-pro) accept the OpenAI-style
+  # multipart request on this path.
+  /deployments/{deployment-id}/images/edits:
+    post:
+      summary: Edits or extends an image from a text prompt and one or more input images on a given image model deployment.
+      operationId: ImageEdits_Create
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/imageEditsRequest'
+      parameters:
+        - in: path
+          name: deployment-id
+          required: true
+          schema:
+            type: string
+            example: FLUX.2-pro
+            description: Deployment id of the image model which was deployed.
+        - in: query
+          name: api-version
+          required: true
+          schema:
+            type: string
+            example: preview
+            description: api version
+      responses:
+        '200':
+          description: Ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/generateImagesResponse'
+        default:
+          description: An error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dalleErrorResponse'
   # Local addition (not in upstream): model listing endpoints. Not part of
   # the upstream data-plane inference spec but exposed by AOAI accounts at
   # the resource level. Best-effort: AIServices-kind Foundry accounts may
@@ -2617,6 +2659,40 @@ components:
         style:
           $ref: "#/components/schemas/imageStyle"
       required:
+        - prompt
+    imageEditsRequest:
+      type: object
+      properties:
+        image:
+          description: The image to edit, or several images for models that take more than one reference image.
+          type: string
+          format: binary
+        prompt:
+          description: A text description of the desired edit.
+          type: string
+          minLength: 1
+        mask:
+          description: Optional mask image. Not every image model supports a mask.
+          type: string
+          format: binary
+        model:
+          description: The deployment name of the image model.
+          type: string
+        "n":
+          description: The number of images to generate.
+          type: integer
+          minimum: 1
+          default: 1
+        size:
+          description: The size of the generated images, for example 1024x1024.
+          type: string
+        response_format:
+          $ref: "#/components/schemas/imagesResponseFormat"
+        user:
+          description: A unique identifier representing your end-user, which can help to monitor and detect abuse.
+          type: string
+      required:
+        - image
         - prompt
     generateImagesResponse:
       type: object

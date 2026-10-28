@@ -153,6 +153,36 @@ Fetch the keys with
   not exist" instead of a retry. Azure metrics showed no 429s or 5xx from
   `eastus2` in that window. If Claude is later deployed in `eastus`, add it
   to `modelDeployments[0]` and it will fail over automatically.
+- **Image models** (Black Forest Labs FLUX, format `'Black Forest Labs'`)
+  are deployed as `DataZoneStandard` so processing stays in the US data zone.
+  `FLUX.2-pro` and `FLUX.1-Kontext-pro` create and edit images; `FLUX-1.1-pro`
+  creates only. They live in `modelDeployments` like any other model, with
+  these differences:
+  - `capacity` is required (`modules/aif-deployments.bicep` has no default for
+    formats other than OpenAI and Anthropic) and is counted in requests per
+    minute, not tokens.
+  - The `DataZoneStandard` quota is **one pool per subscription**, shared by
+    both regions and by every Foundry account in it (prod, dev and others),
+    like the `gpt-6-astra` pool. Check it with
+    `az cognitiveservices usage list -l <region>`
+    (`AIServices.DataZoneStandard.FLUX.2-pro` and so on) before choosing
+    capacities, and keep the sum over all deployments at or below the limit.
+  - They are served under `api-version=preview`, return base64 images, and
+    are reached through `POST /deployments/{name}/images/{generations,edits}`
+    (root API) and `POST /openai/v1/images/{generations,edits}` (v1 API). The
+    `images/edits` operations are local additions to the specs (upstream
+    2024-10-21 has no edits).
+  - Both inference policies skip the token limit and token metric policies
+    when the path contains `/images/`, and emit an `Image Count` metric
+    (value = images in the response `data`) in `<outbound>` instead. The v1
+    policy reads `model` from the multipart form text when the body is not
+    JSON, because edits are multipart.
+  - They are not added to `model-catalog.json`: `/catalog` lists chat models
+    with token windows only.
+  - The other image models (`gpt-image-*`, `MAI-Image-*`, `FLUX.2-flex`) offer
+    only `GlobalStandard`, which can process outside the US. As of 2026-10,
+    `gpt-image-1.5` is the only OpenAI image model with `DataZoneStandard`; it
+    is eastus2-only and retires 2026-12-16, so it is not deployed here.
 - **APIM authenticates to AI Foundry via system-assigned managed identity**
   (no API keys to backends). End-users authenticate to APIM via APIM
   subscription keys.
@@ -473,7 +503,9 @@ python examples/test-apim.py
 
    Every `run_chat`, `run_chat_v1`, `run_anthropic`, and `run_embedding_v1`
    call should print a coherent answer (or, for embeddings, a vector dimension
-   and prompt-token count).
+   and prompt-token count). The `run_image` and `run_image_v1` calls write the
+   generated and edited images to a temporary directory and print each path
+   and size.
 4. Smoke-test the `/models` listing routes added to the inference APIs and
    the new `/catalog` endpoint:
 
