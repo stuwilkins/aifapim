@@ -271,6 +271,15 @@ Fetch the keys with
     and is a separate operator script. After locking, set
     `requestLogManageImmutabilityPolicy = false` so a redeploy does not try to
     rewrite the locked policy.
+  - **The data account's network bypass must be `AzureServices`.** Creating
+    the Event Grid subscription makes Event Grid configure storage
+    notifications on the account, and with `bypass: None` the deployment
+    fails with `NetworkAclsBypassAzureServicesNotPermitted` (the message
+    shows up as a `listAccountSas` 400 inside "Storage Notification"). The
+    default action stays `Deny`, so only the trusted-service path is opened,
+    and shared-key access is off, so a trusted service still needs an Entra
+    role. If a later run fails with a `keyToSign` error instead, shared-key
+    access being off is the next suspect.
   - **No public IP addresses.** A BNL management-group policy ("Deny public
     IPs", `Not allowed resource types`) blocks
     `Microsoft.Network/publicIPAddresses`, so a NAT gateway cannot be used

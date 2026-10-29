@@ -55,9 +55,13 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
     publicNetworkAccess: empty(readerIps) ? 'Disabled' : 'Enabled'
+    // AzureServices is required: Event Grid configures storage notifications on
+    // this account and fails with NetworkAclsBypassAzureServicesNotPermitted
+    // when the bypass is None. With shared-key access off and no anonymous
+    // access, a trusted service still needs an Entra role to read or write.
     networkAcls: {
       defaultAction: 'Deny'
-      bypass: 'None'
+      bypass: 'AzureServices'
       ipRules: [for ip in readerIps: {
         value: ip
         action: 'Allow'
