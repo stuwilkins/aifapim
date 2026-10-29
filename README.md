@@ -304,8 +304,13 @@ modules/
   llm-latency-alerts.bicep      # Scheduled-query latency alerts on ApiManagementGatewayLogs
   log-analytics-workspace.bicep # Log Analytics workspace
   network.bicep                 # APIM subnet
-  private-dns-zone.bicep        # Private DNS zone (AI Foundry endpoints, Event Hub)
+  private-dns-zone.bicep        # Private DNS zone (AI Foundry endpoints, Event Hub, request log storage)
+  request-log.bicep             # Request body log wrapper (optional)
+  request-log-storage.bicep     # WORM storage account for request bodies
+  request-log-function.bicep    # Loader function app, NAT subnet, Event Grid, roles
+  request-log-workspace.bicep   # Prompts workspace, custom table, DCE and DCR
   role.bicep                    # Generic role-assignment helper
+  storage-private-endpoint.bicep # Private endpoint for a storage account
   vnet.bicep                    # Virtual network
 apim_policies/
   AOAI_Policy-Managed_Identity_with_Retry_MultiRegion.xml       # AOAI multi-region with failover
@@ -536,6 +541,10 @@ Management v2 tiers":
    emits it as a dimension).
 4. **AOAI streaming `ModelName` is empty on a subset of rows**, correlating
    with whether the client requested `stream_options.include_usage=true`.
+5. **Anthropic prompts are mostly missing.** When the request's `system`
+   field is a list of content blocks (as Claude Code and OpenCode send), the
+   `LlmLog` row has the response but no prompt. A plain-string `system` is
+   logged. See "Request body log" below.
 
 If accurate per-model token accounting in the unified `LlmLog` table is
 critical for downstream tooling, options are:
@@ -549,6 +558,26 @@ critical for downstream tooling, options are:
   completion-token caveat noted in item 2).
 
 [aigw]: https://learn.microsoft.com/en-us/azure/api-management/genai-gateway-capabilities
+
+### Request body log
+
+Because of item 5 above, the stack can optionally keep the raw body of every
+POST to the three inference APIs. Set `requestBodyLogging = true` (and
+`requestLogSubnetIPPrefix`, `requestLogReaderGroupObjectId`) in the parameter
+file. The gateway writes each body to a write-once (WORM) blob named by the
+request id (`CorrelationId` in `ApiManagementGatewayLogs`), and a Flex
+Consumption function loads a searchable copy into a separate Log Analytics
+workspace (`LlmRequestBody_CL`).
+
+- It is off by default. It adds a subnet, a NAT gateway, two storage accounts
+  with private endpoints, a function app, a workspace and a data collection
+  rule, and the stored bodies contain whatever users send.
+- The immutability policy is created unlocked and locking is a separate,
+  irreversible step. Blobs move Hot to Cold after 7 days and to Archive after
+  90, and are never deleted.
+- The workspace copy is readable by anyone with subscription-level `Reader`.
+- The function code and operator runbook are in the private `aifapim-config`
+  repository (`request-log/`).
 
 ### Foundry-side diagnostics
 

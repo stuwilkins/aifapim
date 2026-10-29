@@ -45,4 +45,5 @@ resource emailActionGroup 'microsoft.insights/actionGroups@2019-06-01' = {
 }
 
 output aiId string = applicationInsights.id
+output connectionString string = applicationInsights.properties.ConnectionString
 output actionGroupId string = emailActionGroup.id

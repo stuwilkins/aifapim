@@ -214,6 +214,47 @@ Fetch the keys with
   need the Standard or Premium SKU. The namespace and the APIM Data Sender role
   are provisioned, but no APIM logger sends to it yet (only the Application
   Insights logger exists); it is not used by `aifapim-config`.
+- **Request body log** (`requestBodyLogging`, off by default): the built-in
+  LLM log (`ApiManagementGatewayLlmLog`) drops the prompt of Anthropic requests
+  whose `system` field is a list of blocks (measured 2026-10: a plain-string
+  `system` is logged, a list is not, with or without `cache_control`; replies
+  are still logged), which is what Claude Code and OpenCode send. When the
+  switch is true, `apim_policies/RequestBodyLog_Fragment.xml` replaces the
+  `<!-- __REQUEST_LOG__ -->` marker in `<inbound>` of the three inference
+  policies. It writes the raw body of every POST to a write-once blob with
+  `<send-one-way-request>` (managed identity, `If-None-Match: *`, fire and
+  forget, name = request id = `CorrelationId`). `modules/request-log.bicep`
+  builds the rest: the data storage account (private endpoint, shared-key
+  access off, container-level time-based immutability, Hot to Cold at 7 days
+  to Archive at 90, no delete), Event Grid `BlobCreated` to a queue on a host
+  storage account, a Flex Consumption function app in a delegated subnet of
+  `regions[0]`'s VNet (private subnet with a NAT gateway, private endpoints
+  for the host storage), and a separate `law-prompts-<unique>` workspace with
+  the custom table `LlmRequestBody_CL` behind a data collection rule. The
+  function code is in `aifapim-config` (`request-log/`), with its operator
+  runbook. Things to know:
+  - The immutability policy is created **unlocked**. Locking is irreversible
+    and is a separate operator script. After locking, set
+    `requestLogManageImmutabilityPolicy = false` so a redeploy does not try to
+    rewrite the locked policy.
+  - The workspace copy is not isolated from subscription-level `Reader` (it
+    includes `*/read`), Owner or Contributor. Only the blobs are protected by
+    data-plane roles.
+  - The gateway identity holds Storage Blob Data Contributor with an ABAC
+    condition (`conditionVersion` 2.0) that removes the read, delete and move
+    data actions. The control-plane `generateUserDelegationKey` action in that
+    role cannot be restricted by a condition.
+  - Flex Consumption rejects some site properties (`ftpsState`, `alwaysOn`).
+    Keep `siteConfig` to `appSettings`, and do not set
+    `FUNCTIONS_WORKER_RUNTIME` or the other deprecated settings.
+  - The Flex Consumption subnet cannot also be used for service endpoints, so
+    storage is reached through private endpoints, like AI Foundry.
+  - The blob endpoint in the policy is substituted from
+    `environment().suffixes.storage`; do not hard-code it. The marker and the
+    `__REQUEST_LOG_*__` placeholders are replaced everywhere they appear, so
+    keep them out of other comments.
+  - A write failure never reaches the client (fire and forget). Watch
+    `StorageBlobLogs` and the `verify.sh` reconciliation instead.
 - **Custom TLS**: Certificates must be stored as **secrets** (not
   certificates) in Key Vault. A user-assigned managed identity is created and
   granted Key Vault Secrets User *before* APIM is deployed to solve the
@@ -248,9 +289,15 @@ modules/
   llm-latency-alerts.bicep      # Scheduled-query latency alerts on ApiManagementGatewayLogs
   log-analytics-workspace.bicep # Log Analytics workspace
   network.bicep                 # APIM subnet (added to regions[0] vnet)
-  private-dns-zone.bicep        # Private DNS zone (AI Foundry endpoints, Event Hub)
+  private-dns-zone.bicep        # Private DNS zone (AI Foundry endpoints, Event Hub, request log storage)
+  request-log.bicep             # Request body log wrapper (optional; requestBodyLogging)
+  request-log-storage.bicep     #   WORM data storage account, lifecycle, blob private endpoint
+  request-log-function.bicep    #   Loader function app, NAT subnet, host storage, Event Grid, roles
+  request-log-workspace.bicep   #   law-prompts workspace, LlmRequestBody_CL table, DCE and DCR
+  storage-private-endpoint.bicep # Private endpoint + DNS zone group for a storage account
   vnet.bicep                    # Virtual network
 apim_policies/                  # APIM policy XML (loaded inline via loadTextContent)
+                                #   RequestBodyLog_Fragment.xml  (inserted into the three inference policies)
                                 #   Catalog_Policy.xml  (return-response; no backend)
 api_definitions/                # OpenAPI specs (loaded inline via loadTextContent):
                                 #   AzureOpenAI_inference_2024-10-21.yaml  (root API; vendored from azure-rest-api-specs)
@@ -374,6 +421,10 @@ no-op cost-wise; the pinning is also harmless on those tiers.
   `DeploymentName` from the same row or `Properties.Model` from `AppMetrics`
   (the `<llm-emit-token-metric>` policy on the Anthropic API extracts the
   model from the request body and emits it as a dimension).
+- **Anthropic prompts are mostly missing from `ApiManagementGatewayLlmLog`**:
+  when `system` is a list of content blocks (Claude Code, OpenCode) the row has
+  a response but an empty `RequestMessages`. Replies are fine. Use the request
+  body log (above) when prompts are needed.
 - Custom policy metrics (`<llm-emit-token-metric>` dimensions and the explicit
   `Anthropic Completion Tokens` emit) all land in `AppMetrics` under the
   namespace given by `apimProductName` (substituted into the policy XML at

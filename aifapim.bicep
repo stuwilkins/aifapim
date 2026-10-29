@@ -110,6 +110,39 @@ param apimProductDescription string = 'AI Foundry APIM product. Groups the Azure
 @description('Curated model catalog JSON array (id/name/provider/context/output per chat-LLM model). Populated in the bicepparam file via loadTextContent(\'./model-catalog.json\'). Baked into the GET /catalog return-response policy at deploy time.')
 param catalogJson string
 
+@description('Store the raw body of every POST to the three inference APIs in a write-once (WORM) blob, and load a searchable copy into a separate Log Analytics workspace. The built-in LLM log drops the prompt of Claude requests whose system field is a list of blocks. Off by default: it needs a subnet, storage, a function app and a NAT gateway, and the stored bodies contain whatever users send.')
+param requestBodyLogging bool = false
+
+@description('CIDR of the subnet created in regions[0]\'s virtual network for the request log function (at least a /27, inside regions[0].vnetAddressPrefix). Required when requestBodyLogging is true.')
+param requestLogSubnetIPPrefix string = ''
+
+@description('Object ID of the Entra group that may read the stored request bodies (Storage Blob Data Reader and Log Analytics Reader). Leave empty to skip the assignments.')
+param requestLogReaderGroupObjectId string = ''
+
+@description('Public IPv4 addresses or CIDR ranges allowed to read the request body blobs from outside the VNet. Empty means private endpoint access only.')
+param requestLogReaderIps array = []
+
+@description('Maximum number of request log function instances. Bounds the load on the ingestion endpoint.')
+@minValue(1)
+@maxValue(100)
+param requestLogMaxInstances int = 4
+
+@description('Days of the time-based immutability (WORM) policy on the request body container. 146000 days (about 400 years) is the Azure maximum. The policy is created unlocked; locking it cannot be undone and is a separate step.')
+@minValue(1)
+@maxValue(146000)
+param requestLogImmutabilityDays int = 146000
+
+@description('Whether the template creates and updates the immutability policy on the request body container. Set to false after the policy has been locked, because a locked policy can only be extended.')
+param requestLogManageImmutabilityPolicy bool = true
+
+@description('Move request body blobs to the Cold tier after this many days.')
+@minValue(1)
+param requestLogColdAfterDays int = 7
+
+@description('Move request body blobs to the Archive tier after this many days.')
+@minValue(2)
+param requestLogArchiveAfterDays int = 90
+
 // Render the IP allow-list entries as APIM ip-filter child elements. CIDR
 // entries become <address-range from=... to=.../> using parseCidr's
 // firstUsable/lastUsable; bare addresses become <address>...</address>.
@@ -126,14 +159,25 @@ var allowedIpsXml = join(map(allowedClientIps, ip => contains(ip, '/')
 //   __METRIC_NAMESPACE__   -> apimProductName (App Insights custom-metric namespace)
 //   __SECONDARY_MODELS__   -> secondaryModelList (models deployed in the secondary region;
 //                             the policies fail over only for these)
+//   <!-- __REQUEST_LOG__ --> -> requestLogPolicyXml (request body log block, or nothing)
 var secondaryModelList = '|${join(map(modelDeployments[0], d => d.name), '|')}|'
-var openApiXml = replace(replace(replace(replace(loadTextContent('apim_policies/AOAI_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), '__SECONDARY_MODELS__', secondaryModelList)
+
+// Request body log. The three inference policies carry the marker comment below
+// in <inbound>. It is replaced by apim_policies/RequestBodyLog_Fragment.xml
+// when requestBodyLogging is true (with the blob endpoint and container filled
+// in), and by nothing when it is false. Applied last, so the fragment is not
+// touched by the other substitutions.
+var requestLogMarker = '<!-- __REQUEST_LOG__ -->'
+var requestLogStorageName = 'stllmreq${unique}'
+var requestLogContainerName = 'llm-requests'
+var requestLogPolicyXml = requestBodyLogging ? replace(replace(loadTextContent('apim_policies/RequestBodyLog_Fragment.xml'), '__REQUEST_LOG_BLOB_ENDPOINT__', 'https://${requestLogStorageName}.blob.${environment().suffixes.storage}'), '__REQUEST_LOG_CONTAINER__', requestLogContainerName) : ''
+var openApiXml = replace(replace(replace(replace(replace(loadTextContent('apim_policies/AOAI_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), '__SECONDARY_MODELS__', secondaryModelList), requestLogMarker, requestLogPolicyXml)
 
 // Anthropic API policy (multi-region retry variant).
-var anthropicApiXml = replace(replace(replace(replace(loadTextContent('apim_policies/Anthropic_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), '__SECONDARY_MODELS__', secondaryModelList)
+var anthropicApiXml = replace(replace(replace(replace(replace(loadTextContent('apim_policies/Anthropic_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), '__SECONDARY_MODELS__', secondaryModelList), requestLogMarker, requestLogPolicyXml)
 
 // OpenAI v1 Messages API policy (multi-region retry variant).
-var openaiV1MessagesApiXml = replace(replace(replace(replace(loadTextContent('apim_policies/OpenAIv1Messages_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), '__SECONDARY_MODELS__', secondaryModelList)
+var openaiV1MessagesApiXml = replace(replace(replace(replace(replace(loadTextContent('apim_policies/OpenAIv1Messages_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), '__SECONDARY_MODELS__', secondaryModelList), requestLogMarker, requestLogPolicyXml)
 
 // Catalog API policy: static return-response, no backend.
 // Sentinels replaced: __ALLOWED_CLIENT_IPS__ (IP filter) and __CATALOG_JSON__ (model list body).
@@ -475,6 +519,35 @@ module api 'modules/api.bicep' = {
   }
 }
 
+// Request body log: write-once blobs, a function that loads them into a
+// separate Log Analytics workspace, and the roles between them. See
+// modules/request-log.bicep.
+module requestLog 'modules/request-log.bicep' = if (requestBodyLogging) {
+  name: 'request-log'
+  params: {
+    uniqueSuffix: unique
+    location: location
+    tags: tags
+    vnetName: vnet[0].outputs.vnetName
+    vnetId: vnet[0].outputs.vnetId
+    privateEndpointSubnetId: vnet[0].outputs.subnetIds.openai
+    functionSubnetPrefix: requestLogSubnetIPPrefix
+    dataStorageAccountName: requestLogStorageName
+    containerName: requestLogContainerName
+    readerGroupObjectId: requestLogReaderGroupObjectId
+    readerIps: requestLogReaderIps
+    apimPrincipalId: apiManagement.outputs.apiManagementIdentityPrincipalId
+    auditWorkspaceId: logAnalyticsWorkspace.outputs.id
+    applicationInsightsName: applicationInsightsName
+    applicationInsightsConnectionString: applicationInsights.outputs.connectionString
+    maximumInstanceCount: requestLogMaxInstances
+    immutabilityPeriodDays: requestLogImmutabilityDays
+    manageImmutabilityPolicy: requestLogManageImmutabilityPolicy
+    coldAfterDays: requestLogColdAfterDays
+    archiveAfterDays: requestLogArchiveAfterDays
+  }
+}
+
 resource eventHubNamespaceParent 'Microsoft.EventHub/namespaces@2024-01-01' existing = {
   name: eventHubNamespaceName
 }
@@ -532,3 +605,8 @@ output apiManagementPortalHostName string = apiManagement.outputs.apiManagementD
 output vnetNames array = [for (region, i) in regions: vnet[i].outputs.vnetName]
 output openAiNames array = [for (region, i) in regions: aif[i].outputs.openAiName]
 output openAiEndpoints array = [for (region, i) in regions: aif[i].outputs.openAiEndpoint]
+output requestLogFunctionApp string = requestBodyLogging ? requestLog!.outputs.functionAppName : ''
+output requestLogStorageAccount string = requestBodyLogging ? requestLog!.outputs.dataStorageAccountName : ''
+output requestLogContainer string = requestBodyLogging ? requestLog!.outputs.containerName : ''
+output requestLogWorkspace string = requestBodyLogging ? requestLog!.outputs.workspaceName : ''
+output requestLogNatIp string = requestBodyLogging ? requestLog!.outputs.natPublicIp : ''

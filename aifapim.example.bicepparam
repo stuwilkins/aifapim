@@ -107,6 +107,16 @@ param allowedClientIps = [
 // output windows must come from the vendor model cards.
 param catalogJson = loadTextContent('./model-catalog.example.json')
 
+// ---- Request body log (optional) ----
+// Off by default. When true, the gateway writes the raw body of every POST to
+// a write-once blob and a function loads a searchable copy into a separate
+// Log Analytics workspace. See README "Request body log". The subnet must lie
+// inside regions[0].vnetAddressPrefix, be at least a /27 and not overlap the
+// apim or openai subnets.
+param requestBodyLogging = false
+// param requestLogSubnetIPPrefix = '10.10.4.0/27'
+// param requestLogReaderGroupObjectId = '<entra-group-object-id>'
+
 // ---- Regions ----
 // Two-region multi-region deployment. regions[1] is the *primary* backend;
 // regions[0] is the failover. vnetAddressPrefix and openAiSubnetPrefix must

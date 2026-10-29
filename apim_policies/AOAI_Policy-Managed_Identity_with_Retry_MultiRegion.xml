@@ -18,6 +18,7 @@
             }
             return &quot;&quot;;
         }" />
+        <!-- __REQUEST_LOG__ -->
         <!-- Fail over to the secondary region only for models deployed there.
              aifapim.bicep fills in the model list below at deploy time, as
              '|name|name|...' from modelDeployments[0]. The placeholder is

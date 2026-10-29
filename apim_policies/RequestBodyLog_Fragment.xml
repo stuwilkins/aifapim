@@ -1,0 +1,73 @@
+<!-- Request body log. Writes the raw request body of every POST to a write-once
+             blob, fire and forget: the call is not waited for and a failure never
+             affects the client. aifapim.bicep substitutes this block into the three
+             inference policies when requestBodyLogging is true, and replaces the
+             blob endpoint and container placeholders below. The blob name is the
+             request id, which is the CorrelationId in ApiManagementGatewayLogs.
+             Metadata values are cleaned to a safe character set before they go in
+             a header. The content type keeps all printable ASCII, so a quoted
+             multipart boundary survives, and only control characters (which
+             could split a header) are replaced. The If-None-Match header makes a second write of the same
+             name fail instead of overwriting. -->
+        <choose>
+            <when condition="@(context.Request.Method == &quot;POST&quot; &amp;&amp; context.Request.Body != null)">
+                <authentication-managed-identity resource="https://storage.azure.com/" output-token-variable-name="requestLogToken" ignore-error="true" />
+                <send-one-way-request mode="new" timeout="30">
+                    <set-url>@{
+                        var now = DateTime.UtcNow;
+                        return &quot;__REQUEST_LOG_BLOB_ENDPOINT__/__REQUEST_LOG_CONTAINER__/&quot;
+                            + now.Year.ToString(&quot;D4&quot;) + &quot;/&quot; + now.Month.ToString(&quot;D2&quot;) + &quot;/&quot; + now.Day.ToString(&quot;D2&quot;)
+                            + &quot;/&quot; + context.RequestId.ToString();
+                    }</set-url>
+                    <set-method>PUT</set-method>
+                    <set-header name="Authorization" exists-action="override">
+                        <value>@(&quot;Bearer &quot; + context.Variables.GetValueOrDefault&lt;string&gt;(&quot;requestLogToken&quot;, &quot;&quot;))</value>
+                    </set-header>
+                    <set-header name="x-ms-version" exists-action="override">
+                        <value>2022-11-02</value>
+                    </set-header>
+                    <set-header name="x-ms-date" exists-action="override">
+                        <value>@(DateTime.UtcNow.ToString(&quot;R&quot;))</value>
+                    </set-header>
+                    <set-header name="x-ms-blob-type" exists-action="override">
+                        <value>BlockBlob</value>
+                    </set-header>
+                    <set-header name="If-None-Match" exists-action="override">
+                        <value>*</value>
+                    </set-header>
+                    <set-header name="Content-Type" exists-action="override">
+                        <value>application/octet-stream</value>
+                    </set-header>
+                    <set-header name="x-ms-blob-content-type" exists-action="override">
+                        <value>@{
+                            var t = System.Text.RegularExpressions.Regex.Replace(context.Request.Headers.GetValueOrDefault(&quot;Content-Type&quot;, &quot;&quot;), &quot;[^\\x20-\\x7E]&quot;, &quot;_&quot;);
+                            return t.Length == 0 ? &quot;application/octet-stream&quot; : (t.Length &gt; 512 ? t.Substring(0, 512) : t);
+                        }</value>
+                    </set-header>
+                    <set-header name="x-ms-meta-subscription" exists-action="override">
+                        <value>@{
+                            var s = context.Subscription == null ? &quot;&quot; : (context.Subscription.Name ?? &quot;&quot;);
+                            s = System.Text.RegularExpressions.Regex.Replace(s, &quot;[^A-Za-z0-9._@\\-]&quot;, &quot;_&quot;);
+                            return s.Length == 0 ? &quot;-&quot; : (s.Length &gt; 128 ? s.Substring(0, 128) : s);
+                        }</value>
+                    </set-header>
+                    <set-header name="x-ms-meta-api" exists-action="override">
+                        <value>@{
+                            var a = System.Text.RegularExpressions.Regex.Replace(context.Api.Name ?? &quot;&quot;, &quot;[^A-Za-z0-9._@\\-]&quot;, &quot;_&quot;);
+                            return a.Length == 0 ? &quot;-&quot; : (a.Length &gt; 128 ? a.Substring(0, 128) : a);
+                        }</value>
+                    </set-header>
+                    <set-header name="x-ms-meta-model" exists-action="override">
+                        <value>@{
+                            var m = context.Variables.GetValueOrDefault&lt;string&gt;(&quot;requestModel&quot;, context.Variables.GetValueOrDefault&lt;string&gt;(&quot;deploymentName&quot;, &quot;&quot;));
+                            m = System.Text.RegularExpressions.Regex.Replace(m ?? &quot;&quot;, &quot;[^A-Za-z0-9._@\\-]&quot;, &quot;_&quot;);
+                            return m.Length == 0 ? &quot;-&quot; : (m.Length &gt; 128 ? m.Substring(0, 128) : m);
+                        }</value>
+                    </set-header>
+                    <set-header name="x-ms-meta-stream" exists-action="override">
+                        <value>@(context.Variables.GetValueOrDefault&lt;string&gt;(&quot;requestIsStream&quot;, &quot;-&quot;))</value>
+                    </set-header>
+                    <set-body>@(context.Request.Body.As&lt;byte[]&gt;(preserveContent: true))</set-body>
+                </send-one-way-request>
+            </when>
+        </choose>
