@@ -73,7 +73,7 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
       {
         name: 'Allow_Outbound_To_Private_Endpoints'
         properties: {
-          description: 'Outbound HTTPS to the storage private endpoints in the VNet.'
+          description: 'Outbound HTTPS to the storage and Azure Monitor private endpoints in the VNet.'
           protocol: 'Tcp'
           sourcePortRange: '*'
           destinationPortRange: '443'
@@ -81,20 +81,6 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
           destinationAddressPrefix: 'VirtualNetwork'
           access: 'Allow'
           priority: 300
-          direction: 'Outbound'
-        }
-      }
-      {
-        name: 'Allow_Outbound_Internet_HTTPS'
-        properties: {
-          description: 'Outbound HTTPS to the Azure Monitor ingestion endpoint and Microsoft Entra ID, through the NAT gateway.'
-          protocol: 'Tcp'
-          sourcePortRange: '*'
-          destinationPortRange: '443'
-          sourceAddressPrefix: 'VirtualNetwork'
-          destinationAddressPrefix: 'Internet'
-          access: 'Allow'
-          priority: 310
           direction: 'Outbound'
         }
       }
@@ -116,37 +102,10 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
   }
 }
 
-// The subnet is private (no default outbound access), so the function needs a
-// NAT gateway to reach the public Azure Monitor ingestion endpoint.
-resource natIp 'Microsoft.Network/publicIPAddresses@2023-11-01' = {
-  name: 'pip-nat-${functionSubnetName}-${uniqueSuffix}'
-  location: location
-  tags: tags
-  sku: {
-    name: 'Standard'
-  }
-  properties: {
-    publicIPAllocationMethod: 'Static'
-  }
-}
-
-resource natGateway 'Microsoft.Network/natGateways@2023-11-01' = {
-  name: 'nat-${functionSubnetName}-${uniqueSuffix}'
-  location: location
-  tags: tags
-  sku: {
-    name: 'Standard'
-  }
-  properties: {
-    idleTimeoutInMinutes: 10
-    publicIpAddresses: [
-      {
-        id: natIp.id
-      }
-    ]
-  }
-}
-
+// The subnet is private (no default outbound access) and has no route to the
+// internet: BNL policy denies public IP addresses, so there is no NAT gateway.
+// The function reaches Azure Monitor through the private link scope
+// (request-log-ampls.bicep) and storage through private endpoints.
 resource functionSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' = {
   parent: vnet
   name: functionSubnetName
@@ -154,9 +113,6 @@ resource functionSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' =
     addressPrefix: functionSubnetPrefix
     networkSecurityGroup: {
       id: nsg.id
-    }
-    natGateway: {
-      id: natGateway.id
     }
     delegations: [
       {
@@ -484,4 +440,3 @@ resource blobCreatedSubscription 'Microsoft.EventGrid/systemTopics/eventSubscrip
 output functionAppName string = functionApp.name
 output functionPrincipalId string = functionApp.identity.principalId
 output hostStorageName string = hostStorage.name
-output natPublicIp string = natIp.properties.ipAddress

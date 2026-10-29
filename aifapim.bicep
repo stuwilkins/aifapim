@@ -110,7 +110,7 @@ param apimProductDescription string = 'AI Foundry APIM product. Groups the Azure
 @description('Curated model catalog JSON array (id/name/provider/context/output per chat-LLM model). Populated in the bicepparam file via loadTextContent(\'./model-catalog.json\'). Baked into the GET /catalog return-response policy at deploy time.')
 param catalogJson string
 
-@description('Store the raw body of every POST to the three inference APIs in a write-once (WORM) blob, and load a searchable copy into a separate Log Analytics workspace. The built-in LLM log drops the prompt of Claude requests whose system field is a list of blocks. Off by default: it needs a subnet, storage, a function app and a NAT gateway, and the stored bodies contain whatever users send.')
+@description('Store the raw body of every POST to the three inference APIs in a write-once (WORM) blob, and load a searchable copy into a separate Log Analytics workspace. The built-in LLM log drops the prompt of Claude requests whose system field is a list of blocks. Off by default: it needs a subnet, storage, a function app, private endpoints and an Azure Monitor private link scope, and the stored bodies contain whatever users send.')
 param requestBodyLogging bool = false
 
 @description('CIDR of the subnet created in regions[0]\'s virtual network for the request log function (at least a /27, inside regions[0].vnetAddressPrefix). Required when requestBodyLogging is true.')
@@ -539,6 +539,7 @@ module requestLog 'modules/request-log.bicep' = if (requestBodyLogging) {
     apimPrincipalId: apiManagement.outputs.apiManagementIdentityPrincipalId
     auditWorkspaceId: logAnalyticsWorkspace.outputs.id
     applicationInsightsName: applicationInsightsName
+    applicationInsightsId: applicationInsights.outputs.aiId
     applicationInsightsConnectionString: applicationInsights.outputs.connectionString
     maximumInstanceCount: requestLogMaxInstances
     immutabilityPeriodDays: requestLogImmutabilityDays
@@ -609,4 +610,3 @@ output requestLogFunctionApp string = requestBodyLogging ? requestLog!.outputs.f
 output requestLogStorageAccount string = requestBodyLogging ? requestLog!.outputs.dataStorageAccountName : ''
 output requestLogContainer string = requestBodyLogging ? requestLog!.outputs.containerName : ''
 output requestLogWorkspace string = requestBodyLogging ? requestLog!.outputs.workspaceName : ''
-output requestLogNatIp string = requestBodyLogging ? requestLog!.outputs.natPublicIp : ''

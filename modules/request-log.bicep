@@ -35,8 +35,9 @@ param apimPrincipalId string
 @description('Resource ID of the main Log Analytics workspace that receives blob audit logs.')
 param auditWorkspaceId string
 
-@description('Name of the existing Application Insights component and its connection string, for the loader logs.')
+@description('Name, resource ID and connection string of the existing Application Insights component, for the loader logs.')
 param applicationInsightsName string
+param applicationInsightsId string
 param applicationInsightsConnectionString string
 
 @description('Maximum number of function instances.')
@@ -131,6 +132,42 @@ module loader 'request-log-function.bicep' = {
   }
 }
 
+// Private path to Azure Monitor for the function (and for the gateway's
+// Application Insights logger, which is in the same VNet). Created after the
+// loader so private endpoints on the subnet are written one at a time.
+module ampls 'request-log-ampls.bicep' = {
+  name: 'request-log-ampls'
+  params: {
+    uniqueSuffix: uniqueSuffix
+    location: location
+    tags: tags
+    vnetId: vnetId
+    privateEndpointSubnetId: privateEndpointSubnetId
+    blobPrivateDnsZoneId: blobZone.outputs.zoneId
+    scopedResources: [
+      {
+        name: workspace.outputs.dceName
+        id: workspace.outputs.dceId
+      }
+      {
+        name: workspace.outputs.workspaceName
+        id: workspace.outputs.workspaceId
+      }
+      {
+        name: applicationInsightsName
+        id: applicationInsightsId
+      }
+      {
+        name: last(split(auditWorkspaceId, '/'))
+        id: auditWorkspaceId
+      }
+    ]
+  }
+  dependsOn: [
+    loader
+  ]
+}
+
 resource dataStorage 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
   name: dataStorageAccountName
   dependsOn: [
@@ -175,4 +212,3 @@ output functionPrincipalId string = loader.outputs.functionPrincipalId
 output dataStorageAccountName string = storage.outputs.name
 output containerName string = storage.outputs.containerName
 output workspaceName string = workspace.outputs.workspaceName
-output natPublicIp string = loader.outputs.natPublicIp

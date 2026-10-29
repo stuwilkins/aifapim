@@ -307,7 +307,8 @@ modules/
   private-dns-zone.bicep        # Private DNS zone (AI Foundry endpoints, Event Hub, request log storage)
   request-log.bicep             # Request body log wrapper (optional)
   request-log-storage.bicep     # WORM storage account for request bodies
-  request-log-function.bicep    # Loader function app, NAT subnet, Event Grid, roles
+  request-log-function.bicep    # Loader function app, private subnet, Event Grid, roles
+  request-log-ampls.bicep       # Azure Monitor private link scope and private endpoint
   request-log-workspace.bicep   # Prompts workspace, custom table, DCE and DCR
   role.bicep                    # Generic role-assignment helper
   storage-private-endpoint.bicep # Private endpoint for a storage account
@@ -569,9 +570,13 @@ request id (`CorrelationId` in `ApiManagementGatewayLogs`), and a Flex
 Consumption function loads a searchable copy into a separate Log Analytics
 workspace (`LlmRequestBody_CL`).
 
-- It is off by default. It adds a subnet, a NAT gateway, two storage accounts
-  with private endpoints, a function app, a workspace and a data collection
-  rule, and the stored bodies contain whatever users send.
+- It is off by default. It adds a subnet, two storage accounts with private
+  endpoints, a function app, a workspace, a data collection rule and an Azure
+  Monitor private link scope, and the stored bodies contain whatever users
+  send. There is no NAT gateway: BNL policy denies public IP addresses.
+- The private link scope changes Azure Monitor DNS for the whole `regions[0]`
+  VNet, including the gateway's Application Insights logger (see the
+  `AGENTS.md` note on AMPLS).
 - The immutability policy is created unlocked and locking is a separate,
   irreversible step. Blobs move Hot to Cold after 7 days and to Archive after
   90, and are never deleted.

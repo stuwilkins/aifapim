@@ -135,6 +135,8 @@ resource readerAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' =
 
 output workspaceId string = workspace.id
 output workspaceName string = workspace.name
+output dceId string = dce.id
+output dceName string = dce.name
 output dceLogsIngestionEndpoint string = dce.properties.logsIngestion.endpoint
 output dcrName string = dcr.name
 output dcrImmutableId string = dcr.properties.immutableId

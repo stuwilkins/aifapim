@@ -63,10 +63,6 @@ rule:
     # later is an in-place SKU change that also works after the immutability
     # policy is locked.
     - Azure.Storage.UseReplication
-    # Request body log: a NAT gateway (not zone-redundant) gives the private
-    # function subnet a fixed outbound address. The loader retries and is not
-    # latency-sensitive, so zone redundancy of the address is not needed.
-    - Azure.PublicIP.AvailabilityZone
     # Request body log: the loader is a Flex Consumption function app (FC1). It
     # scales to zero, has no HTTP trigger, and does not expose instance count,
     # availability zone or ARR affinity settings that these rules check.

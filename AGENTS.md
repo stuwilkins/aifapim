@@ -260,15 +260,31 @@ Fetch the keys with
   access off, container-level time-based immutability, Hot to Cold at 7 days
   to Archive at 90, no delete), Event Grid `BlobCreated` to a queue on a host
   storage account, a Flex Consumption function app in a delegated subnet of
-  `regions[0]`'s VNet (private subnet with a NAT gateway, private endpoints
-  for the host storage), and a separate `law-prompts-<unique>` workspace with
-  the custom table `LlmRequestBody_CL` behind a data collection rule. The
+  `regions[0]`'s VNet (private subnet with no internet route, private
+  endpoints for the host storage), an Azure Monitor private link scope with a
+  private endpoint (`request-log-ampls.bicep`), and a separate
+  `law-prompts-<unique>` workspace with the custom table `LlmRequestBody_CL`
+  behind a data collection rule. The
   function code is in `aifapim-config` (`request-log/`), with its operator
   runbook. Things to know:
   - The immutability policy is created **unlocked**. Locking is irreversible
     and is a separate operator script. After locking, set
     `requestLogManageImmutabilityPolicy = false` so a redeploy does not try to
     rewrite the locked policy.
+  - **No public IP addresses.** A BNL management-group policy ("Deny public
+    IPs", `Not allowed resource types`) blocks
+    `Microsoft.Network/publicIPAddresses`, so a NAT gateway cannot be used
+    (the first dev deployment failed on it). The AIFAPIM VNets are not
+    connected to the BNL hub, whose spoke route table sends `0.0.0.0/0` to a
+    firewall in another subscription. The function therefore reaches the Logs
+    Ingestion endpoint through an Azure Monitor private link scope (AMPLS).
+  - The AMPLS private endpoint writes private records for the Azure Monitor
+    names into four private DNS zones for every client of the `regions[0]`
+    VNet, including the gateway's Application Insights logger. Both access
+    modes are `Open`, so Azure Monitor resources outside the scope stay
+    reachable publicly. The scope holds the collection endpoint, the prompts
+    workspace, Application Insights and the main workspace. Use one scope per
+    DNS: do not add a second AMPLS endpoint to this VNet.
   - The workspace copy is not isolated from subscription-level `Reader` (it
     includes `*/read`), Owner or Contributor. Only the blobs are protected by
     data-plane roles.
@@ -324,7 +340,8 @@ modules/
   private-dns-zone.bicep        # Private DNS zone (AI Foundry endpoints, Event Hub, request log storage)
   request-log.bicep             # Request body log wrapper (optional; requestBodyLogging)
   request-log-storage.bicep     #   WORM data storage account, lifecycle, blob private endpoint
-  request-log-function.bicep    #   Loader function app, NAT subnet, host storage, Event Grid, roles
+  request-log-function.bicep    #   Loader function app, private subnet, host storage, Event Grid, roles
+  request-log-ampls.bicep       #   Azure Monitor private link scope, private endpoint and DNS zones
   request-log-workspace.bicep   #   law-prompts workspace, LlmRequestBody_CL table, DCE and DCR
   storage-private-endpoint.bicep # Private endpoint + DNS zone group for a storage account
   vnet.bicep                    # Virtual network
