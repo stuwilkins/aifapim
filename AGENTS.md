@@ -52,6 +52,38 @@ that syntax is for raw JSON parameter files and causes the CLI to fail with
 
 The template file is **`aifapim.bicep`** (note: no hyphen).
 
+### Capture the output in a file
+
+The agent cannot run these commands, so when the operator runs a what-if, a
+deployment or a test, send the output to `~/Projects/Scratch/` as well as to
+the screen. The agent can then read the file instead of having it pasted.
+
+- The operator's shell is zsh. Its pipe-status array is `pipestatus` and
+  starts at 1. In bash it is `PIPESTATUS`, starting at 0. A plain `$?` after
+  a pipe is the exit code of `tee`, which is always 0.
+- `az` has no `--no-color` flag. Set `AZURE_CORE_NO_COLOR=true` so colour
+  codes stay out of the file.
+- Errors go to a separate `.err` file, copied to the screen, so they do not
+  mix into JSON output.
+
+```zsh
+AZURE_CORE_NO_COLOR=true az deployment group what-if -g <rg> \
+  --parameters <file>.bicepparam \
+  2> >(tee ~/Projects/Scratch/whatif-<env>.err >&2) \
+  | tee ~/Projects/Scratch/whatif-<env>.txt
+echo "exit=${pipestatus[1]}"
+
+AZURE_CORE_NO_COLOR=true az deployment group create -g <rg> \
+  --parameters <file>.bicepparam --query properties.outputs -o json \
+  2> >(tee ~/Projects/Scratch/deploy-<env>.err >&2) \
+  | tee ~/Projects/Scratch/deploy-<env>.json
+echo "exit=${pipestatus[1]}"
+```
+
+For a test or a script that writes to both streams, use
+`<command> 2>&1 | tee ~/Projects/Scratch/<name>.txt`. Never tee anything that
+prints a secret (a subscription key, or a command that echoes one).
+
 ### Workbook
 
 **The canonical workbook now lives in the `aifapim-config` repo.** Deploy it
