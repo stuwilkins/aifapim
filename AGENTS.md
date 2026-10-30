@@ -144,15 +144,48 @@ Fetch the keys with
     JSON array of chat-LLM models with `id`, `name`, `provider`, `context`,
     and `output` fields baked in at deploy time from `model-catalog.json`
     (in the `aifapim-config` repo, passed as the `catalogJson` param).
-    Grouped under its own **`aifapim-catalog` product** — keys scoped to this
-    product cannot call any inference endpoint. No backend is contacted;
-    the policy uses `<return-response>` in `<inbound>`. Used by the ansible
-    catalog poller to discover models and token windows at play-time.
+    Grouped under its own **`aifapim-catalog` product** (shown as "NSLS-II AIF
+    APIM Services (catalog poller)") — keys scoped to this product cannot call
+    any inference endpoint — and also in the user and service products. No
+    backend is contacted; the policy uses `<return-response>` in `<inbound>`
+    after `<base />`, so a product-level policy applies to it too. Used by the
+    ansible catalog poller to discover models and token windows at play-time.
     **Route composition note:** APIM constructs the gateway route as
     `<API path> + <operation urlTemplate>`. The catalog API uses
     `path = 'catalog'` and `urlTemplate = '/'`, giving the effective route
     `/catalog`. Do **not** put `/catalog` in the OpenAPI operation path — that
     doubles the segment to `/catalog/catalog` and produces a 404.
+- **Products** (the same on dev and prod). A key's product decides which
+  product-level policy applies to it, and a subscription's scope can be changed
+  in place (`PATCH` `properties.scope`), keeping its name and key values.
+
+  | Product ID | Display name | APIs | Keys | Product policy |
+  | --- | --- | --- | --- | --- |
+  | `apimProductName` (`nsls2aifapim`) | NSLS-II AIF APIM | 3 inference + `catalog-api` | people only: one key each, named by the Entra object id | none |
+  | `nsls2aifapim-services-external` | NSLS-II AIF APIM Services (external) | 3 inference + `catalog-api` | services (`svc-...`) | none |
+  | `nsls2aifapim-services-internal` | NSLS-II AIF APIM Services (internal) | 3 inference + `catalog-api` | on-site services | `ip-filter`: the NSLS-II NAT pool `130.199.137.0/28` |
+  | `aifapim-catalog` | NSLS-II AIF APIM Services (catalog poller) | `catalog-api` | `svc-catalog-poller` | none |
+
+  The service products come from the `serviceProducts` parameter (each
+  `{ name, displayName, description, allowedClientIps? }`), written one at a
+  time after the user product's links. Things to know:
+  - **The internal lock sees the caller the gateway sees.** Clients that reach
+    `hermes.nsls2.bnl.gov` arrive from its AWS front addresses (the Hermes
+    proxy sends no `X-Forwarded-For`), so an internal key only works when the
+    caller is on N2SN or NSLS2ACC and calls `aifapim.nsls2.bnl.gov` directly,
+    from the NAT pool. Through Hermes it gets a 403.
+  - **A product's `<ip-filter>` is in addition to the global allow-list** on
+    each API: both must pass. A CIDR in `allowedClientIps` covers its whole
+    range, network to broadcast (the global list uses usable addresses), so all
+    16 NAT pool addresses are accepted.
+  - **The product policy only runs where an API policy calls `<base />`.** All
+    four API policies do. The catalog policy used not to, and would have
+    skipped the lock.
+  - **`catalog-api` is in the user product on purpose.** Prod had it by hand;
+    the template now states it. The template creates links but never removes
+    them.
+  - Product IDs cannot be renamed, so `aifapim-catalog` and `nsls2aifapim`
+    keep their IDs and only their display names and descriptions change.
 - **Anthropic models are available on AI Foundry in select regions only.**
   As of 2026-07: `eastus2` has the full catalog; `eastus` carries a partial
   subset (`claude-haiku-4-5`, `claude-opus-4-8`, `claude-sonnet-5`). Populate

@@ -72,6 +72,9 @@ param catalogProductDisplayName string
 @description('Description for the catalog product.')
 param catalogProductDescription string
 
+@description('Service products, each { name, displayName, description, policyXml }. policyXml is a product-level policy, or empty for none.')
+param serviceProducts array = []
+
 resource parentAPIM 'Microsoft.ApiManagement/service@2023-03-01-preview' existing = {
   name: apimName
 }
@@ -515,3 +518,64 @@ resource catalogProductCatalogApi 'Microsoft.ApiManagement/service/products/apis
   parent: catalogProduct
   name: catalogApi.name
 }
+
+// --- The catalog API is also part of the user product ---
+//
+// The service products below have it too. Chained after the catalog product
+// association to keep the sequential order the Developer SKU needs.
+
+resource apimProductCatalogApi 'Microsoft.ApiManagement/service/products/apis@2023-03-01-preview' = {
+  parent: apimProduct
+  name: catalogApi.name
+  dependsOn: [catalogProductCatalogApi]
+}
+
+// --- Service products ---
+//
+// Same APIs as the user product (the three inference APIs and the catalog API).
+// A product-level policy (the NAT-pool lock) is added when the entry has one.
+// Everything is written one at a time, in this order: products, then their API
+// links, then their policies.
+
+@batchSize(1)
+resource serviceProduct 'Microsoft.ApiManagement/service/products@2023-03-01-preview' = [for p in serviceProducts: {
+  parent: parentAPIM
+  name: p.name
+  dependsOn: [apimProductCatalogApi]
+  properties: {
+    displayName: p.displayName
+    description: p.description
+    subscriptionRequired: true
+    approvalRequired: true
+    state: 'published'
+  }
+}]
+
+var serviceProductApiNames = [
+  apiName
+  openaiV1MessagesApiName
+  anthropicApiName
+  catalogApiName
+]
+var serviceProductApiLinks = flatten(map(range(0, length(serviceProducts)), i => map(serviceProductApiNames, a => {
+  productIndex: i
+  api: a
+})))
+
+@batchSize(1)
+resource serviceProductApi 'Microsoft.ApiManagement/service/products/apis@2023-03-01-preview' = [for link in serviceProductApiLinks: {
+  parent: serviceProduct[link.productIndex]
+  name: link.api
+  dependsOn: [serviceProduct]
+}]
+
+@batchSize(1)
+resource serviceProductPolicy 'Microsoft.ApiManagement/service/products/policies@2023-03-01-preview' = [for (p, i) in serviceProducts: if (!empty(p.policyXml)) {
+  parent: serviceProduct[i]
+  name: 'policy'
+  dependsOn: [serviceProductApi]
+  properties: {
+    format: 'xml'
+    value: p.policyXml
+  }
+}]

@@ -5,6 +5,9 @@
     <ip-filter action="allow">
       __ALLOWED_CLIENT_IPS__
     </ip-filter>
+    <!-- Run the product-level policy: without <base /> a product's own rule (the
+         NAT-pool lock on the internal service product) would not apply here. -->
+    <base />
     <!-- Static return-response: no backend call is made. The catalog body is
          baked in at deploy time: aifapim.bicep replaces the sentinel in the
          set-body element below with the XML-escaped contents of

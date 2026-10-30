@@ -107,6 +107,27 @@ param allowedClientIps = [
 // output windows must come from the vendor model cards.
 param catalogJson = loadTextContent('./model-catalog.example.json')
 
+// ---- Service products (optional) ----
+// Extra products for service (machine) keys, each with the three inference APIs
+// and the catalog API. allowedClientIps restricts a product to those callers
+// (a CIDR covers its whole range, network to broadcast), on top of the global
+// allowedClientIps. Leave the list empty to have none.
+param serviceProducts = [
+  {
+    name: 'services-external'
+    displayName: 'Services (external)'
+    description: 'Keys for services, from anywhere the gateway allow-list accepts.'
+  }
+  {
+    name: 'services-internal'
+    displayName: 'Services (internal)'
+    description: 'Keys for services on site only.'
+    allowedClientIps: [
+      '192.0.2.0/28'  // example (TEST-NET-1)
+    ]
+  }
+]
+
 // ---- Request body log (optional) ----
 // Off by default. When true, the gateway writes the raw body of every POST to
 // a write-once blob and a function loads a searchable copy into a separate

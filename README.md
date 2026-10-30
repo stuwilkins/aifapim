@@ -282,8 +282,12 @@ Pay particular attention to:
   documentation IPs that cannot route real traffic; replace them.
 - `regions` and `modelDeployments` — nested arrays; outer indices of
   `modelDeployments` must align with `regions[*]`.
-- `apimProductName` — the APIM product all three APIs are grouped under, and
-  the App Insights custom-metric namespace.
+- `apimProductName` — the APIM product the three inference APIs (and the
+  catalog API) are grouped under, and the App Insights custom-metric namespace.
+- `serviceProducts` — optional extra products for service keys, each
+  `{ name, displayName, description, allowedClientIps? }` with the same four
+  APIs. `allowedClientIps` locks a product to those callers (a CIDR covers its
+  whole range) on top of the global list. See `AGENTS.md` "Products".
 
 ## Repository Structure
 

@@ -1,0 +1,23 @@
+<policies>
+    <inbound>
+        <base />
+        <!-- Product-level allow-list, substituted at deploy time by aifapim.bicep
+             from the allowedClientIps entry of the service product (an IPv4
+             address, or a CIDR range from its network to its broadcast address).
+             This runs in addition to the allow-list on each API: a call must pass
+             both. It runs where an API policy calls <base />, which every API
+             policy here does. -->
+        <ip-filter action="allow">
+            __PRODUCT_ALLOWED_IPS__
+        </ip-filter>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

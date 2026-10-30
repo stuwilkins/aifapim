@@ -51,8 +51,7 @@ rule:
     - Azure.EventHub.AvailabilityZone
     # The inference policies deliberately have no <base /> in <backend>: APIM
     # allows one backend policy and <base /> plus <retry> fails deploy
-    # validation (see AGENTS.md). The catalog policy has none in <inbound>, as
-    # it only filters by IP and returns a static body.
+    # validation (see AGENTS.md).
     - Azure.APIM.PolicyBase
     # Defender for APIs requires subscription-level enablement of the
     # Microsoft.Security/defenderForApisComponents plan — not a Bicep

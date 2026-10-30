@@ -107,6 +107,9 @@ param apimProductDisplayName string = 'AIFAPIM'
 @description('Description for the APIM product.')
 param apimProductDescription string = 'AI Foundry APIM product. Groups the Azure OpenAI, Azure OpenAI v1 Messages, and Anthropic APIs.'
 
+@description('Extra APIM products for service (machine) keys. Each entry is { name, displayName, description, allowedClientIps? }. Each holds the three inference APIs and the catalog API, like the user product. allowedClientIps (IPv4 addresses, or CIDR ranges taken from the network to the broadcast address) restricts the product to those callers, in addition to the global allowedClientIps.')
+param serviceProducts array = []
+
 @description('Curated model catalog JSON array (id/name/provider/context/output per chat-LLM model). Populated in the bicepparam file via loadTextContent(\'./model-catalog.json\'). Baked into the GET /catalog return-response policy at deploy time.')
 param catalogJson string
 
@@ -212,8 +215,20 @@ var catalogApiName = 'catalog-api'
 var catalogApiPath = 'catalog'
 var catalogApiDisplayName = 'AIFAPIM Model Catalog API'
 var catalogProductName = 'aifapim-catalog'
-var catalogProductDisplayName = 'AIFAPIM Catalog'
-var catalogProductDescription = 'Read-only product scoped to GET /catalog only. Used by the ansible catalog poller to discover models and token windows. Keys issued under this product cannot call inference endpoints.'
+var catalogProductDisplayName = 'NSLS-II AIF APIM Services (catalog poller)'
+var catalogProductDescription = 'Read-only product scoped to GET /catalog only, for the catalog poller service. Keys issued under this product cannot call inference endpoints.'
+
+// Service products: the product-level ip-filter policy is rendered per product
+// when it has allowedClientIps. A CIDR entry covers the whole range, network to
+// broadcast (unlike the global allow-list, which uses the usable addresses), so
+// that every address of the NSLS-II NAT pool, all 16 in use, is accepted.
+var productIpPolicyTemplate = loadTextContent('apim_policies/Product_IpRestricted_Policy.xml')
+var serviceProductsResolved = map(serviceProducts, p => {
+  name: p.name
+  displayName: p.displayName
+  description: p.description
+  policyXml: empty(p.?allowedClientIps ?? []) ? '' : replace(productIpPolicyTemplate, '__PRODUCT_ALLOWED_IPS__', join(map(p.allowedClientIps, ip => contains(ip, '/') ? '<address-range from="${parseCidr(ip).network}" to="${parseCidr(ip).broadcast}" />' : '<address>${ip}</address>'), '\n            '))
+})
 
 var unique = uniqueString(resourceGroup().id, subscription().id)
 var apiManagementServiceName = 'apim-${unique}'
@@ -516,6 +531,7 @@ module api 'modules/api.bicep' = {
     catalogProductName: catalogProductName
     catalogProductDisplayName: catalogProductDisplayName
     catalogProductDescription: catalogProductDescription
+    serviceProducts: serviceProductsResolved
   }
 }
 
