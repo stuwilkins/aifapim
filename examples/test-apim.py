@@ -236,7 +236,7 @@ if __name__ == "__main__":
     run_chat_v1("gpt-4.1-mini")
 
     # Test the Anthropic Claude model (deployed via Azure AI Foundry) through APIM.
-    run_anthropic("claude-sonnet-4-5")
+    run_anthropic("claude-sonnet-5-5")
 
     # Test the Meta Llama model (deployed via Azure AI Foundry) through APIM.
     run_chat("Llama-4-Maverick-17B-128E-Instruct-FP8")

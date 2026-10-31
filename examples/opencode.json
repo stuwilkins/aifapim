@@ -44,8 +44,8 @@
         }
       },
       "models": {
-        "claude-sonnet-4-5": { "name": "Claude Sonnet 4.5" },
-        "claude-haiku-4-5": { "name": "Claude Haiku 4.5" }
+        "claude-sonnet-5-5": { "name": "Claude Sonnet 5.5" },
+        "claude-haiku-5-5": { "name": "Claude Haiku 5.5" }
       }
     }
   }

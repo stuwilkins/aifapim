@@ -68,7 +68,7 @@ from anthropic import Anthropic
 import os
 
 endpoint = f"https://{os.environ['AIFAPIM_HOST']}"
-deployment_name = "claude-sonnet-4-5"  # or any deployed Claude model
+deployment_name = "claude-sonnet-5-5"  # or any deployed Claude model
 api_key = os.environ["AIFAPIM_API_KEY"]
 
 client = Anthropic(
