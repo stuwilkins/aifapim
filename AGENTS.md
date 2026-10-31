@@ -170,10 +170,18 @@ Fetch the keys with
   `{ name, displayName, description, allowedClientIps? }`), written one at a
   time after the user product's links. Things to know:
   - **The internal lock sees the caller the gateway sees.** Clients that reach
-    `hermes.nsls2.bnl.gov` arrive from its AWS front addresses (the Hermes
-    proxy sends no `X-Forwarded-For`), so an internal key only works when the
+    `hermes.nsls2.bnl.gov` pass through a Signal Sciences WAF and arrive from
+    its AWS addresses. The WAF sends no client address in any header (checked
+    on dev, 2026-10-31: it adds only `X-Amzn-Trace-Id`, `X-Sigsci-Requestid`
+    and `X-Sigsci-Agentresponse`), so an internal key only works when the
     caller is on N2SN or NSLS2ACC and calls `aifapim.nsls2.bnl.gov` directly,
-    from the NAT pool. Through Hermes it gets a 403.
+    from the NAT pool. Through Hermes it gets a 403. The gateway never trusts
+    `X-Forwarded-For` for the lock or the logged address. The two `X-Sigsci-*`
+    headers are logged to Application Insights (`AppRequests`, as
+    `Request-X-Sigsci-Requestid` and `Request-X-Sigsci-Agentresponse`), so a
+    request can be found in the WAF console, which records the client address
+    the WAF saw. Behind the BNL NAT that is the NAT pool address, so it does not
+    identify a host.
   - **A product's `<ip-filter>` is in addition to the global allow-list** on
     each API: both must pass. A CIDR in `allowedClientIps` covers its whole
     range, network to broadcast (the global list uses usable addresses), so all

@@ -75,6 +75,17 @@ param catalogProductDescription string
 @description('Service products, each { name, displayName, description, policyXml }. policyXml is a product-level policy, or empty for none.')
 param serviceProducts array = []
 
+// Request headers copied into Application Insights (AppRequests, as
+// Request-<name>). The WAF in front of hermes.nsls2.bnl.gov (Signal Sciences)
+// adds the two X-Sigsci headers: the request id finds the request in the WAF
+// console, which records the client address the WAF saw. The WAF sends no
+// X-Forwarded-For, so that one is empty unless a client sets it.
+var loggedRequestHeaders = [
+  'X-Forwarded-For'
+  'X-Sigsci-Requestid'
+  'X-Sigsci-Agentresponse'
+]
+
 resource parentAPIM 'Microsoft.ApiManagement/service@2023-03-01-preview' existing = {
   name: apimName
 }
@@ -203,7 +214,7 @@ resource aoaiDiagnostic 'Microsoft.ApiManagement/service/apis/diagnostics@2024-0
     }
     frontend: {
       request: {
-        headers: ['X-Forwarded-For']
+        headers: loggedRequestHeaders
         body: { bytes: 0 }
       }
       response: {
@@ -245,7 +256,7 @@ resource diagnostic 'Microsoft.ApiManagement/service/diagnostics@2023-03-01-prev
     }
     frontend: {
       request: {
-        headers: ['X-Forwarded-For']
+        headers: loggedRequestHeaders
         body: {
           bytes: 0
         }
@@ -329,7 +340,7 @@ resource openaiV1MessagesDiagnostic 'Microsoft.ApiManagement/service/apis/diagno
     }
     frontend: {
       request: {
-        headers: ['X-Forwarded-For']
+        headers: loggedRequestHeaders
         body: { bytes: 0 }
       }
       response: {
@@ -403,7 +414,7 @@ resource anthropicDiagnostic 'Microsoft.ApiManagement/service/apis/diagnostics@2
     }
     frontend: {
       request: {
-        headers: ['X-Forwarded-For']
+        headers: loggedRequestHeaders
         body: { bytes: 0 }
       }
       response: {
