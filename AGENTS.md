@@ -151,6 +151,20 @@ Fetch the keys with
     `POST /v1/messages/count_tokens`. Foundry returns 404 `api_not_supported`
     for `/anthropic/v1/models`; that route is intentionally not exposed.
     Grouped under `apimProductName` product.
+  - `black-forest-labs-api` — path `providers/blackforestlabs/v1`, only
+    `POST /flux-2-pro`. Azure serves `FLUX.2-pro` only on Black Forest Labs'
+    provider route (the OpenAI-style routes return 404 for it), so it has its
+    own backends (`bfl-primary-backend`, `bfl-secondary-backend`), policy and
+    spec. The path is Azure's own, so a client changes only the host and the
+    key header. Backend host is `<account>.<bflEndpointDomain>`, default
+    `cognitiveservices.azure.com`; Microsoft's documented
+    `<account>.api.cognitive.microsoft.com` does not exist in DNS for these
+    accounts. The response is synchronous (`data[0].b64_json`). The policy
+    has no token limit and emits `Image Count` with `Model` fixed to
+    `FLUX.2-pro`. Add another BFL model path by adding an operation to
+    `BlackForestLabs_OpenAPI.json` (the policy is model-neutral except the
+    `Model` dimension and the failover check). Grouped under `apimProductName`
+    product and the service products.
   - `catalog-api` — path `catalog`, `GET /catalog` only. Returns a static
     JSON array of chat-LLM models with `id`, `name`, `provider`, `context`,
     and `output` fields baked in at deploy time from `model-catalog.json`
@@ -172,9 +186,9 @@ Fetch the keys with
 
   | Product ID | Display name | APIs | Keys | Product policy |
   | --- | --- | --- | --- | --- |
-  | `apimProductName` (`nsls2aifapim`) | NSLS-II AIF APIM | 3 inference + `catalog-api` | people only: one key each, named by the Entra object id | none |
-  | `nsls2aifapim-services-external` | NSLS-II AIF APIM Services (external) | 3 inference + `catalog-api` | services (`svc-...`) | none |
-  | `nsls2aifapim-services-internal` | NSLS-II AIF APIM Services (internal) | 3 inference + `catalog-api` | on-site services | `ip-filter`: the NSLS-II NAT pool `130.199.137.0/28` |
+  | `apimProductName` (`nsls2aifapim`) | NSLS-II AIF APIM | 4 inference + `catalog-api` | people only: one key each, named by the Entra object id | none |
+  | `nsls2aifapim-services-external` | NSLS-II AIF APIM Services (external) | 4 inference + `catalog-api` | services (`svc-...`) | none |
+  | `nsls2aifapim-services-internal` | NSLS-II AIF APIM Services (internal) | 4 inference + `catalog-api` | on-site services | `ip-filter`: the NSLS-II NAT pool `130.199.137.0/28` |
   | `aifapim-catalog` | NSLS-II AIF APIM Services (catalog poller) | `catalog-api` | `svc-catalog-poller` | none |
 
   The service products come from the `serviceProducts` parameter (each
@@ -235,8 +249,8 @@ Fetch the keys with
   secondary (eastus) is counterproductive because eastus carries fewer
   models, and once a retry switches to the secondary the policy never
   returns to the primary, so the secondary's 404 hides the real error
-  (for example a 429 from eastus2). The retry condition in all three of
-  `apim_policies/{AOAI,OpenAIv1Messages,Anthropic}_Policy-Managed_Identity_with_Retry_MultiRegion.xml`
+  (for example a 429 from eastus2). The retry condition in all four of
+  `apim_policies/{AOAI,OpenAIv1Messages,Anthropic,BlackForestLabs}_Policy-Managed_Identity_with_Retry_MultiRegion.xml`
   only retries on 429 (rate limit) and 5xx (server errors). Do not add 404
   back. Do not add `<base />` to the `<backend>` section either: APIM
   allows one backend policy, and `<base />` plus `<retry>` fails deploy
@@ -321,7 +335,7 @@ Fetch the keys with
   `system` is logged, a list is not, with or without `cache_control`; replies
   are still logged), which is what Claude Code and OpenCode send. When the
   switch is true, `apim_policies/RequestBodyLog_Fragment.xml` replaces the
-  `<!-- __REQUEST_LOG__ -->` marker in `<inbound>` of the three inference
+  `<!-- __REQUEST_LOG__ -->` marker in `<inbound>` of the four inference
   policies. It writes the raw body of every POST to a write-once blob with
   `<send-one-way-request>` (managed identity, `If-None-Match: *`, fire and
   forget, name = request id = `CorrelationId`). `modules/request-log.bicep`
@@ -385,7 +399,7 @@ Fetch the keys with
   certificates) in Key Vault. A user-assigned managed identity is created and
   granted Key Vault Secrets User *before* APIM is deployed to solve the
   chicken-and-egg problem.
-- **IP filtering**: All three APIM policies share an inbound
+- **IP filtering**: All four inference policies share an inbound
   `<ip-filter action="allow">` block populated at deploy time from the
   `allowedClientIps` parameter in the bicepparam files. Entries may be bare
   IPv4 addresses or CIDR ranges (CIDR is expanded via
@@ -407,7 +421,7 @@ modules/
   aif.bicep                     # AI Foundry account + private endpoint
   aif-deployments.bicep         # Model deployments (sub-module; avoids race on account provisioning)
   api-management-private.bicep  # APIM instance, custom domains, CA certs
-  api.bicep                     # All three APIs, backends, product, diagnostics
+  api.bicep                     # All four inference APIs, the catalog API, backends, product, diagnostics
   app-insights.bicep            # Application Insights
   cognitive-services-role.bicep # Cognitive Services / AI User RBAC for APIM system identity
   event-hub.bicep               # Event Hub namespace (private endpoint only; not wired to an APIM logger yet)
@@ -424,12 +438,14 @@ modules/
   storage-private-endpoint.bicep # Private endpoint + DNS zone group for a storage account
   vnet.bicep                    # Virtual network
 apim_policies/                  # APIM policy XML (loaded inline via loadTextContent)
-                                #   RequestBodyLog_Fragment.xml  (inserted into the three inference policies)
+                                #   RequestBodyLog_Fragment.xml  (inserted into the four inference policies)
+                                #   BlackForestLabs_Policy-...MultiRegion.xml  (FLUX.2-pro provider route)
                                 #   Catalog_Policy.xml  (return-response; no backend)
 api_definitions/                # OpenAPI specs (loaded inline via loadTextContent):
                                 #   AzureOpenAI_inference_2024-10-21.yaml  (root API; vendored from azure-rest-api-specs)
                                 #   AzureOpenAI_v1_Messages_OpenAPI.json   (v1 Messages API)
                                 #   AzureAnthropic_OpenAPI.json            (Anthropic Messages API)
+                                #   BlackForestLabs_OpenAPI.json           (POST /flux-2-pro; Black Forest Labs route)
                                 #   Catalog_OpenAPI.json                   (GET /catalog; static model list)
 resources/                      # User-supplied CA PEMs loaded via loadTextContent
                                 # in the bicepparam file (intermediateCaCert /
@@ -467,7 +483,7 @@ and inspecting
 `properties.serializedData.items[*].content.{resourceType,crossComponentResources}`.
 Fix: redeploy via the command in the "Workbook only" section above.
 
-All three OpenAPI specs are embedded from local files in `api_definitions/`.
+All the OpenAPI specs are embedded from local files in `api_definitions/`.
 The Azure OpenAI data-plane inference spec is a vendored copy of the upstream
 stable `2024-10-21/inference.yaml` from the Azure REST API specs repo, pinned
 locally for deterministic deploys (deploys no longer depend on github.com being
@@ -493,8 +509,8 @@ On Developer SKU APIM (`apiManagementSku = 'Developer'`, single unit, no
 redundancy) every `az deployment group create` triggers a service-level
 mutation, and the single-instance service transitions while child writes
 land. With unserialized fan-out across the ~19 child resources in
-`modules/api.bicep` (backends, three APIs, three policies, three per-API
-diagnostics, service diagnostic, product, three product/api links), ARM
+`modules/api.bicep` (backends, four APIs, four policies, four per-API
+diagnostics, service diagnostic, product, four product/api links), ARM
 deterministically fails the `api-management` nested deployment with
 `ServiceLocked: The API Service apim-<unique> is transitioning at this
 time`. The service itself is healthy (`provisioningState: Succeeded`)

@@ -1,0 +1,104 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Black Forest Labs FLUX API",
+    "description": "Black Forest Labs provider API for the FLUX models that Azure serves only on this route. The path is the same as on Azure (providers/blackforestlabs/v1), so Azure's own examples work by changing the host and the key header.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/flux-2-pro": {
+      "post": {
+        "operationId": "createFlux2ProImage",
+        "summary": "Create or edit an image with FLUX.2-pro",
+        "description": "Text-to-image, or image editing when input_image (and input_image_2 and so on, up to eight) hold base64-encoded reference images. The response is synchronous and holds one image in data[0].b64_json, as PNG or JPEG.",
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "query",
+            "required": false,
+            "description": "Defaults to preview.",
+            "schema": {
+              "type": "string",
+              "default": "preview"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "prompt"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "description": "The deployment name, FLUX.2-pro.",
+                    "example": "FLUX.2-pro"
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "width": {
+                    "type": "integer",
+                    "example": 1024
+                  },
+                  "height": {
+                    "type": "integer",
+                    "example": 1024
+                  },
+                  "output_format": {
+                    "type": "string",
+                    "enum": [
+                      "jpeg",
+                      "png"
+                    ]
+                  },
+                  "seed": {
+                    "type": "integer"
+                  },
+                  "safety_tolerance": {
+                    "type": "integer"
+                  },
+                  "input_image": {
+                    "type": "string",
+                    "description": "Base64-encoded reference image. A URL is not accepted."
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The generated image.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "b64_json": {
+                            "type": "string",
+                            "description": "Base64-encoded PNG or JPEG."
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

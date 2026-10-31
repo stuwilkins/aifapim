@@ -12,6 +12,27 @@ param serviceUrlSecondary string
 param anthropicServiceUrlPrimary string
 param anthropicServiceUrlSecondary string
 
+@description('Backend URL of the Black Forest Labs provider route on the primary model account (ends in /providers/blackforestlabs/v1).')
+param bflServiceUrlPrimary string
+
+@description('Backend URL of the Black Forest Labs provider route on the secondary model account.')
+param bflServiceUrlSecondary string
+
+@description('Resource name and id for the Black Forest Labs API.')
+param bflApiName string
+
+@description('Display name for the Black Forest Labs API.')
+param bflApiDisplayName string
+
+@description('Path suffix for the Black Forest Labs API (the same path Azure uses).')
+param bflApiPath string
+
+@description('Inline policy XML for the Black Forest Labs API.')
+param bflApiXml string
+
+@description('Inline OpenAPI (JSON) spec defining the Black Forest Labs API operations.')
+param bflOpenApiSpec string
+
 @description('Display name and id for the Azure OpenAI v1 Messages API.')
 param openaiV1MessagesApiName string
 
@@ -170,10 +191,32 @@ resource anthropicSecondaryBackend 'Microsoft.ApiManagement/service/backends@202
   }
 }
 
+resource bflPrimaryBackend 'Microsoft.ApiManagement/service/backends@2023-03-01-preview' = {
+  name: 'bfl-primary-backend'
+  parent: parentAPIM
+  dependsOn: [anthropicSecondaryBackend]
+  properties: {
+    description: 'Primary Black Forest Labs provider route'
+    protocol: 'http'
+    url: bflServiceUrlPrimary
+  }
+}
+
+resource bflSecondaryBackend 'Microsoft.ApiManagement/service/backends@2023-03-01-preview' = {
+  name: 'bfl-secondary-backend'
+  parent: parentAPIM
+  dependsOn: [bflPrimaryBackend]
+  properties: {
+    description: 'Secondary Black Forest Labs provider route'
+    protocol: 'http'
+    url: bflServiceUrlSecondary
+  }
+}
+
 resource api 'Microsoft.ApiManagement/service/apis@2023-03-01-preview' = {
   parent: parentAPIM
   name: apiName
-  dependsOn: [anthropicSecondaryBackend]
+  dependsOn: [bflSecondaryBackend]
   properties: {
     displayName: openaiApiDisplayName
     description: 'Azure OpenAI data-plane inference API. Supports chat completions, embeddings, and model listing operations.'
@@ -439,12 +482,76 @@ resource anthropicDiagnostic 'Microsoft.ApiManagement/service/apis/diagnostics@2
   }
 }
 
+// --- Black Forest Labs API ---
+//
+// FLUX.2-pro is served by Azure only on the Black Forest Labs provider route,
+// so it has its own API, backends and policy. The API path is the path Azure
+// uses, so a client changes only the host and the key header.
+
+resource bflApi 'Microsoft.ApiManagement/service/apis@2023-03-01-preview' = {
+  parent: parentAPIM
+  name: bflApiName
+  dependsOn: [anthropicDiagnostic]
+  properties: {
+    displayName: bflApiDisplayName
+    description: 'Black Forest Labs provider API for FLUX.2-pro image creation and editing.'
+    path: bflApiPath
+    protocols: [
+      'https'
+    ]
+    subscriptionRequired: true
+    subscriptionKeyParameterNames: {
+      header: 'x-api-key'
+      query: 'subscription-key'
+    }
+    format: 'openapi+json'
+    value: bflOpenApiSpec
+  }
+}
+
+resource bflApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2023-03-01-preview' = {
+  parent: bflApi
+  name: 'policy'
+  properties: {
+    format: 'xml'
+    value: bflApiXml
+  }
+}
+
+resource bflDiagnostic 'Microsoft.ApiManagement/service/apis/diagnostics@2024-06-01-preview' = {
+  parent: bflApi
+  dependsOn: [bflApiPolicy]
+  name: 'applicationinsights'
+  properties: {
+    alwaysLog: 'allErrors'
+    httpCorrelationProtocol: 'Legacy'
+    verbosity: 'information'
+    logClientIp: true
+    loggerId: aiLoggerId
+    metrics: true
+    sampling: {
+      samplingType: 'fixed'
+      percentage: 100
+    }
+    frontend: {
+      request: {
+        headers: loggedRequestHeaders
+        body: { bytes: 0 }
+      }
+      response: {
+        headers: []
+        body: { bytes: 0 }
+      }
+    }
+  }
+}
+
 // --- APIM product: groups all APIs under a single product ---
 
 resource apimProduct 'Microsoft.ApiManagement/service/products@2023-03-01-preview' = {
   parent: parentAPIM
   name: apimProductName
-  dependsOn: [anthropicDiagnostic]
+  dependsOn: [bflDiagnostic]
   properties: {
     displayName: apimProductDisplayName
     description: apimProductDescription
@@ -474,6 +581,12 @@ resource apimProductOpenAiV1MessagesApi 'Microsoft.ApiManagement/service/product
   dependsOn: [apimProductAnthropicApi]
 }
 
+resource apimProductBflApi 'Microsoft.ApiManagement/service/products/apis@2023-03-01-preview' = {
+  parent: apimProduct
+  name: bflApi.name
+  dependsOn: [apimProductOpenAiV1MessagesApi]
+}
+
 // --- Catalog API: static return-response, no backend ---
 //
 // GET /catalog returns the curated model list baked in at deploy time.
@@ -483,7 +596,7 @@ resource apimProductOpenAiV1MessagesApi 'Microsoft.ApiManagement/service/product
 resource catalogApi 'Microsoft.ApiManagement/service/apis@2023-03-01-preview' = {
   parent: parentAPIM
   name: catalogApiName
-  dependsOn: [apimProductOpenAiV1MessagesApi]
+  dependsOn: [apimProductBflApi]
   properties: {
     displayName: catalogApiDisplayName
     description: 'Returns the curated list of chat-LLM models with provider, context window, and max output tokens. Body is static and baked in at deploy time — no backend call is made.'
@@ -543,7 +656,7 @@ resource apimProductCatalogApi 'Microsoft.ApiManagement/service/products/apis@20
 
 // --- Service products ---
 //
-// Same APIs as the user product (the three inference APIs and the catalog API).
+// Same APIs as the user product (the four inference APIs and the catalog API).
 // A product-level policy (the NAT-pool lock) is added when the entry has one.
 // Everything is written one at a time, in this order: products, then their API
 // links, then their policies.
@@ -566,6 +679,7 @@ var serviceProductApiNames = [
   apiName
   openaiV1MessagesApiName
   anthropicApiName
+  bflApiName
   catalogApiName
 ]
 var serviceProductApiLinks = flatten(map(range(0, length(serviceProducts)), i => map(serviceProductApiNames, a => {

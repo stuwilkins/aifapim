@@ -94,6 +94,13 @@ param anthropicCapacity int
 @maxValue(240)
 param backendTimeoutSeconds int = 240
 
+@description('Host suffix of the model accounts for the Black Forest Labs provider route (FLUX.2-pro). Both are private-endpoint names with a private DNS zone. Microsoft documents api.cognitive.microsoft.com, but that name does not exist for these accounts.')
+@allowed([
+  'cognitiveservices.azure.com'
+  'services.ai.azure.com'
+])
+param bflEndpointDomain string = 'cognitiveservices.azure.com'
+
 @description('Inbound IP allow-list applied to all three APIM APIs. Each entry is either a single IPv4 address (e.g., "192.0.2.1") or a CIDR range (e.g., "10.0.0.0/16"). CIDR entries are expanded via parseCidr().firstUsable/lastUsable, so the network and broadcast addresses are excluded from the allow-list.')
 @minLength(1)
 param allowedClientIps array
@@ -182,6 +189,9 @@ var anthropicApiXml = replace(replace(replace(replace(replace(loadTextContent('a
 // OpenAI v1 Messages API policy (multi-region retry variant).
 var openaiV1MessagesApiXml = replace(replace(replace(replace(replace(loadTextContent('apim_policies/OpenAIv1Messages_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), '__SECONDARY_MODELS__', secondaryModelList), requestLogMarker, requestLogPolicyXml)
 
+// Black Forest Labs API policy (multi-region retry variant).
+var bflApiXml = replace(replace(replace(replace(replace(loadTextContent('apim_policies/BlackForestLabs_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), '__SECONDARY_MODELS__', secondaryModelList), requestLogMarker, requestLogPolicyXml)
+
 // Catalog API policy: static return-response, no backend.
 // Sentinels replaced: __ALLOWED_CLIENT_IPS__ (IP filter) and __CATALOG_JSON__ (model list body).
 // The JSON is XML-escaped (& first) because it lands in element text; APIM
@@ -210,6 +220,10 @@ var openaiV1MessagesApiDisplayName = 'Azure OpenAI v1 Messages API'
 var anthropicApiName = 'anthropic-service-api'
 var anthropicApiPath = 'anthropic'
 var anthropicApiDisplayName = 'Anthropic Service API'
+
+var bflApiName = 'black-forest-labs-api'
+var bflApiPath = 'providers/blackforestlabs/v1'
+var bflApiDisplayName = 'Black Forest Labs FLUX API'
 
 var catalogApiName = 'catalog-api'
 var catalogApiPath = 'catalog'
@@ -366,6 +380,8 @@ var apiServiceUrlPrimary = 'https://${apiServiceNamePrimary}.openai.azure.com/op
 var apiServiceUrlSecondary = 'https://${apiServiceNameSecondary}.openai.azure.com/openai'
 var anthropicServiceUrlPrimary = 'https://${apiServiceNamePrimary}.services.ai.azure.com/anthropic'
 var anthropicServiceUrlSecondary = 'https://${apiServiceNameSecondary}.services.ai.azure.com/anthropic'
+var bflServiceUrlPrimary = 'https://${apiServiceNamePrimary}.${bflEndpointDomain}/providers/blackforestlabs/v1'
+var bflServiceUrlSecondary = 'https://${apiServiceNameSecondary}.${bflEndpointDomain}/providers/blackforestlabs/v1'
 
 module logAnalyticsWorkspace 'modules/log-analytics-workspace.bicep' = {
   name: 'log-analytics-workspace'
@@ -519,6 +535,13 @@ module api 'modules/api.bicep' = {
     serviceUrlSecondary: apiServiceUrlSecondary
     anthropicServiceUrlPrimary: anthropicServiceUrlPrimary
     anthropicServiceUrlSecondary: anthropicServiceUrlSecondary
+    bflServiceUrlPrimary: bflServiceUrlPrimary
+    bflServiceUrlSecondary: bflServiceUrlSecondary
+    bflApiName: bflApiName
+    bflApiPath: bflApiPath
+    bflApiDisplayName: bflApiDisplayName
+    bflApiXml: bflApiXml
+    bflOpenApiSpec: loadTextContent('api_definitions/BlackForestLabs_OpenAPI.json')
     aiLoggerId: apiManagement.outputs.aiLoggerId
     apimProductName: apimProductName
     apimProductDisplayName: apimProductDisplayName

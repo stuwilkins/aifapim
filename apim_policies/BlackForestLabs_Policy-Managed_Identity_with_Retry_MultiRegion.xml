@@ -1,0 +1,67 @@
+<policies>
+    <inbound>
+        <set-backend-service backend-id="bfl-primary-backend" />
+        <!-- The ip-filter allow-list below is substituted at deploy time by
+             aifapim.bicep from the allowedClientIps parameter (see aifapim.bicepparam). -->
+        <ip-filter action="allow">
+              __ALLOWED_CLIENT_IPS__
+        </ip-filter>
+        <base />
+        <set-query-parameter name="api-version" exists-action="skip">
+            <value>preview</value>
+        </set-query-parameter>
+        <!-- __REQUEST_LOG__ -->
+        <!-- Fail over to the secondary region only when the model is deployed
+             there. aifapim.bicep fills in the model list below at deploy time,
+             as '|name|name|...' from modelDeployments[0]. The placeholder is
+             replaced everywhere it appears, so it must stay out of comments. -->
+        <set-variable name="canFailover" value="@{
+            return &quot;__SECONDARY_MODELS__&quot;.Contains(&quot;|FLUX.2-pro|&quot;);
+        }" />
+        <!-- Image requests carry no token usage, so there is no token limit or
+             token metric here. They are counted in outbound. -->
+        <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+    </inbound>
+    <backend>
+        <!-- 404 is not retried: the backend response goes back to the client
+             unchanged. 429 and 5xx are retried, on the secondary backend when
+             the model is deployed there. -->
+        <retry condition="@(context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)" count="5" interval="1" delta="1" max-interval="8" first-fast-retry="false">
+            <choose>
+                <when condition="@((context.Response.StatusCode == 429 || context.Response.StatusCode >= 500) &amp;&amp; context.Variables.GetValueOrDefault&lt;bool&gt;(&quot;canFailover&quot;, false))">
+                    <set-backend-service backend-id="bfl-secondary-backend" />
+                </when>
+            </choose>
+            <forward-request buffer-request-body="true" timeout="__BACKEND_TIMEOUT__" />
+        </retry>
+    </backend>
+    <outbound>
+        <base />
+        <!-- Count generated images. Successful requests only; the value is the
+             number of images in the response data. -->
+        <choose>
+            <when condition="@(context.Response.StatusCode == 200)">
+                <emit-metric name="Image Count" value="@{
+                    try {
+                        var body = context.Response.Body.As&lt;JObject&gt;(preserveContent: true);
+                        var data = body[&quot;data&quot;] as JArray;
+                        return data != null ? (double)data.Count : 1.0;
+                    } catch {
+                        return 1.0;
+                    }
+                }" namespace="__METRIC_NAMESPACE__">
+                    <dimension name="API ID" />
+                    <dimension name="Subscription ID" />
+                    <dimension name="Subscription Name" value="@(context.Subscription.Name)" />
+                    <dimension name="User ID" />
+                    <dimension name="Product ID" />
+                    <dimension name="Model" value="FLUX.2-pro" />
+                    <dimension name="X-Forwarded-For" value="@(context.Request.Headers.GetValueOrDefault(&quot;X-Forwarded-For&quot;, context.Request.IpAddress))" />
+                </emit-metric>
+            </when>
+        </choose>
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

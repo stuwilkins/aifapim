@@ -128,7 +128,7 @@ through the gateway, tested on prod:
 | --- | --- | --- |
 | `FLUX-1.1-pro` | yes | no |
 | `FLUX.1-Kontext-pro` | yes | yes |
-| `FLUX.2-pro` | no | no |
+| `FLUX.2-pro` | yes, provider route | yes, provider route |
 
 - **Create:** `POST /openai/v1/images/generations?api-version=preview` with a
   JSON body (`model`, `prompt`, `size`, `n`). `FLUX-1.1-pro` accepts a width
@@ -138,10 +138,16 @@ through the gateway, tested on prod:
   form of `image` and `prompt`. Do not send `n`: it is rejected. The v1 route
   `/openai/v1/images/edits` fails with "Model not supported with Responses
   API", so the OpenAI SDK's `images.edit` does not work against it.
-- **`FLUX.2-pro`** is deployed but not reachable: Azure serves it only on
-  Black Forest Labs' own route (`/providers/blackforestlabs/v1/flux-2-pro` on
-  the account's `api.cognitive.microsoft.com` host), which the gateway has no
-  operation for yet.
+- **`FLUX.2-pro`** is served by Azure only on Black Forest Labs' provider
+  route, so the gateway has a separate API for it:
+  `POST /providers/blackforestlabs/v1/flux-2-pro` (the path Azure uses, on the
+  gateway host). Send JSON with `model` (`FLUX.2-pro`), `prompt`, `width`,
+  `height` and `output_format`; for editing add `input_image` (and
+  `input_image_2` and so on, up to eight) as base64, not URLs. The response is
+  synchronous, with the image in `data[0].b64_json`. `api-version` defaults to
+  `preview`. A width and height up to 4 MP are accepted by the model; see
+  [Black Forest Labs](https://docs.bfl.ai/flux_2/flux2_text_to_image) for the
+  other parameters.
 
 ```python
 import base64
@@ -177,6 +183,21 @@ response = requests.post(
 )
 response.raise_for_status()
 edited = base64.b64decode(response.json()["data"][0]["b64_json"])
+
+response = requests.post(
+    f"{endpoint}/providers/blackforestlabs/v1/flux-2-pro",
+    headers=headers,
+    json={
+        "model": "FLUX.2-pro",
+        "prompt": "A calm abstract illustration of teal light beams, no text",
+        "width": 1024,
+        "height": 1024,
+        "output_format": "png",
+    },
+    timeout=180,
+)
+response.raise_for_status()
+flux2 = base64.b64decode(response.json()["data"][0]["b64_json"])
 ```
 
 Image models are billed and limited per image, not per token: the token
@@ -300,11 +321,11 @@ blocks in [`aifapim.bicep`](aifapim.bicep).
 Pay particular attention to:
 
 - `allowedClientIps` — required (`@minLength(1)`); the inbound IP allow-list
-  applied to all three APIM APIs. The example file ships RFC 5737
+  applied to all the inference APIs. The example file ships RFC 5737
   documentation IPs that cannot route real traffic; replace them.
 - `regions` and `modelDeployments` — nested arrays; outer indices of
   `modelDeployments` must align with `regions[*]`.
-- `apimProductName` — the APIM product the three inference APIs (and the
+- `apimProductName` — the APIM product the four inference APIs (and the
   catalog API) are grouped under, and the App Insights custom-metric namespace.
 - `serviceProducts` — optional extra products for service keys, each
   `{ name, displayName, description, allowedClientIps? }` with the same four
@@ -343,11 +364,13 @@ apim_policies/
   AOAI_Policy-Managed_Identity_with_Retry_MultiRegion.xml       # AOAI multi-region with failover
   OpenAIv1Messages_Policy-Managed_Identity_with_Retry_MultiRegion.xml  # AOAI v1 Messages multi-region with failover
   Anthropic_Policy-Managed_Identity_with_Retry_MultiRegion.xml  # Anthropic multi-region with failover
+  BlackForestLabs_Policy-Managed_Identity_with_Retry_MultiRegion.xml  # FLUX.2-pro provider route with failover
   Catalog_Policy.xml                                             # Static return-response; no backend
 api_definitions/
   AzureOpenAI_inference_2024-10-21.yaml  # AOAI data-plane inference spec; vendored from azure-rest-api-specs
   AzureOpenAI_v1_Messages_OpenAPI.json   # AOAI v1 Messages OpenAPI spec imported into APIM
   AzureAnthropic_OpenAPI.json            # Anthropic OpenAPI spec imported into APIM
+  BlackForestLabs_OpenAPI.json           # FLUX.2-pro (Black Forest Labs route) OpenAPI spec
   Catalog_OpenAPI.json                   # GET /catalog static model list
 resources/                       # User-supplied CA PEMs loaded via loadTextContent
                                  # in the bicepparam file. Directory is gitignored
@@ -370,7 +393,7 @@ All policies include:
   provider-side egress IPs you need to allow (for example, the Anthropic
   egress IPs needed for `/anthropic/*` traffic on Foundry).
 
-The three **inference** policies (`AOAI`, `OpenAIv1Messages`, `Anthropic`)
+The four **inference** policies (`AOAI`, `OpenAIv1Messages`, `Anthropic`, `BlackForestLabs`)
 additionally include:
 
 - **Managed Identity auth**: APIM authenticates to AI Foundry backends
@@ -589,7 +612,7 @@ critical for downstream tooling, options are:
 ### Request body log
 
 Because of item 5 above, the stack can optionally keep the raw body of every
-POST to the three inference APIs. Set `requestBodyLogging = true` (and
+POST to the four inference APIs. Set `requestBodyLogging = true` (and
 `requestLogSubnetIPPrefix`, `requestLogReaderGroupObjectId`) in the parameter
 file. The gateway writes each body to a write-once (WORM) blob named by the
 request id (`CorrelationId` in `ApiManagementGatewayLogs`), and a Flex
