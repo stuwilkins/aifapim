@@ -84,6 +84,17 @@ For a test or a script that writes to both streams, use
 `<command> 2>&1 | tee ~/Projects/Scratch/<name>.txt`. Never tee anything that
 prints a secret (a subscription key, or a command that echoes one).
 
+Two zsh traps when handing the operator a command to paste:
+
+- **Quote `'If-Match=*'`** (for example
+  `az rest --method delete --headers 'If-Match=*' ...`). Unquoted, zsh treats
+  the `*` as a filename pattern and stops with `no matches found`, so nothing
+  runs. A script that passes it to `az` as an argument needs no quotes.
+- **No `<placeholder>` text in a pasted line.** zsh reads `<` and `>` as
+  redirections and the whole block fails to parse, usually running none of it.
+  Give a command that reads the value itself instead, for example
+  `KEY=$(az rest ... --query primaryKey -o tsv)`, or `read -rs "KEY?paste: "`.
+
 ### Workbook
 
 **The canonical workbook now lives in the `aifapim-config` repo.** Deploy it
@@ -192,6 +203,23 @@ Fetch the keys with
   - **`catalog-api` is in the user product on purpose.** Prod had it by hand;
     the template now states it. The template creates links but never removes
     them.
+  - **Creating a product also creates an active key for APIM's built-in
+    Administrator** (owner `/users/1`) on it. Nobody uses it, but it is a
+    working credential. After a deploy that adds a product, list the keys of
+    that product whose `ownerId` ends in `/users/1` and delete them (the
+    template cannot, because their names are generated). This happened on dev
+    and prod on 2026-10-30. The older ones on `aifapim-catalog` (dev
+    `6a567c97...`, prod `6a567f70...`) were kept on purpose.
+  - **A what-if always shows every product-to-API link as "Create".** That
+    resource type answers GET with 405, so what-if cannot see the links that
+    exist. Applying a link again is harmless. Check the real state with
+    `GET .../products/<id>/apis`.
+  - **The internal lock was tested on dev on 2026-10-30** with a throwaway key
+    on the internal product. From `130.199.137.2` (the NAT pool) `/catalog` and
+    inference both returned 200. From `130.199.218.21` (BNL, outside the pool)
+    `/catalog` returned 403, with `LastErrorReason` `CallerIpNotAllowed`,
+    `LastErrorScope` `product` and `LastErrorSource` `ip-filter`. No lock test
+    was run on prod.
   - Product IDs cannot be renamed, so `aifapim-catalog` and `nsls2aifapim`
     keep their IDs and only their display names and descriptions change.
 - **Anthropic models are available on AI Foundry in select regions only.**
