@@ -119,42 +119,64 @@ print(response.output[0].content[0].text)
 ### Example: Create or edit an image (FLUX)
 
 The Black Forest Labs FLUX models are deployed as `DataZoneStandard`, so
-prompts and images are processed within the US data zone. `FLUX.2-pro` and
-`FLUX.1-Kontext-pro` create and edit images; `FLUX-1.1-pro` only creates
-them. They are served under `api-version=preview`, and the images come back
-base64-encoded in `data[].b64_json`. Both gateway APIs expose them:
+prompts and images are processed within the US data zone. Images come back
+base64-encoded in `data[].b64_json`, as PNG or JPEG (`FLUX-1.1-pro` returns
+JPEG), so check the first bytes rather than assuming a format. What works
+through the gateway, tested on prod:
 
-- root API: `POST /deployments/{deployment}/images/generations` and
-  `/images/edits`
-- v1 API: `POST /openai/v1/images/generations` and `/images/edits`
+| Model | Create | Edit |
+| --- | --- | --- |
+| `FLUX-1.1-pro` | yes | no |
+| `FLUX.1-Kontext-pro` | yes | yes |
+| `FLUX.2-pro` | no | no |
+
+- **Create:** `POST /openai/v1/images/generations?api-version=preview` with a
+  JSON body (`model`, `prompt`, `size`, `n`). `FLUX-1.1-pro` accepts a width
+  and height of up to 1440.
+- **Edit:** `POST /deployments/FLUX.1-Kontext-pro/images/edits` with
+  `api-version=2025-04-01-preview` (no other version works) and a multipart
+  form of `image` and `prompt`. Do not send `n`: it is rejected. The v1 route
+  `/openai/v1/images/edits` fails with "Model not supported with Responses
+  API", so the OpenAI SDK's `images.edit` does not work against it.
+- **`FLUX.2-pro`** is deployed but not reachable: Azure serves it only on
+  Black Forest Labs' own route (`/providers/blackforestlabs/v1/flux-2-pro` on
+  the account's `api.cognitive.microsoft.com` host), which the gateway has no
+  operation for yet.
 
 ```python
 import base64
 import os
 
+import requests
 from openai import OpenAI
 
 endpoint = f"https://{os.environ['AIFAPIM_HOST']}"
+headers = {"x-api-key": os.environ["AIFAPIM_API_KEY"]}
 
 client = OpenAI(
     base_url=f"{endpoint}/openai/v1/",
     api_key="placeholder",
-    default_headers={"x-api-key": os.environ["AIFAPIM_API_KEY"]},
+    default_headers=headers,
     default_query={"api-version": "preview"},
 )
 
 result = client.images.generate(
-    model="FLUX.2-pro",
-    prompt="A photograph of a red fox in an autumn forest",
+    model="FLUX.1-Kontext-pro",
+    prompt="A calm abstract illustration of teal light beams, no text",
     size="1024x1024",
 )
 image = base64.b64decode(result.data[0].b64_json)
 
-edited = client.images.edit(
-    model="FLUX.2-pro",
-    image=("fox.png", image, "image/png"),
-    prompt="Make it a snowy winter scene",
+response = requests.post(
+    f"{endpoint}/deployments/FLUX.1-Kontext-pro/images/edits",
+    params={"api-version": "2025-04-01-preview"},
+    headers=headers,
+    files={"image": ("in.png", image, "image/png")},
+    data={"prompt": "Change the beams to amber, keep everything else the same"},
+    timeout=180,
 )
+response.raise_for_status()
+edited = base64.b64decode(response.json()["data"][0]["b64_json"])
 ```
 
 Image models are billed and limited per image, not per token: the token
