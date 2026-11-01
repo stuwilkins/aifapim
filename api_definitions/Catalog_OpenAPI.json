@@ -119,6 +119,10 @@
                       "retires": {
                         "type": "string",
                         "description": "Date Microsoft retires the model (YYYY-MM-DD)"
+                      },
+                      "notes": {
+                        "type": "string",
+                        "description": "Limits and quirks of the model: sizes, output format, how many reference images, and what to avoid sending"
                       }
                     }
                   }
