@@ -132,6 +132,79 @@
           }
         }
       }
+    },
+    "/embeddings": {
+      "get": {
+        "operationId": "getEmbeddingCatalog",
+        "summary": "List all available embedding models with their vector sizes and limits",
+        "description": "Embedding models are not in GET /catalog: a chat client would offer them as chat models.",
+        "responses": {
+          "200": {
+            "description": "Array of embedding model entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "name",
+                      "provider",
+                      "dimensions",
+                      "dimensions_adjustable",
+                      "max_input_tokens",
+                      "route",
+                      "residency"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Model deployment name (pass as 'model' in API requests)"
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "Human-readable display name"
+                      },
+                      "provider": {
+                        "type": "string"
+                      },
+                      "dimensions": {
+                        "type": "integer",
+                        "description": "Length of the vectors the model returns by default"
+                      },
+                      "dimensions_adjustable": {
+                        "type": "boolean",
+                        "description": "Whether the 'dimensions' request parameter can shorten the vectors"
+                      },
+                      "max_input_tokens": {
+                        "type": "integer",
+                        "description": "Most tokens one input may hold"
+                      },
+                      "route": {
+                        "type": "object",
+                        "description": "Gateway route: method, path and query"
+                      },
+                      "residency": {
+                        "type": "string",
+                        "description": "DataZone (processed in the US data zone) or Global (may be processed outside the US)"
+                      },
+                      "retires": {
+                        "type": "string",
+                        "description": "Date Microsoft retires the model (YYYY-MM-DD)"
+                      },
+                      "notes": {
+                        "type": "string",
+                        "description": "Limits and quirks, such as the batch size and token limits per request"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

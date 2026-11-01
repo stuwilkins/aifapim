@@ -8,15 +8,16 @@
     <!-- Run the product-level policy: without <base /> a product's own rule (the
          NAT-pool lock on the internal service product) would not apply here. -->
     <base />
-    <!-- Static return-response: no backend call is made. Two bodies are baked
+    <!-- Static return-response: no backend call is made. Three bodies are baked
          in at deploy time by aifapim.bicep, each replacing the sentinel in its
          own set-body element with the XML-escaped JSON: the chat model catalog
-         (model-catalog.json) for GET /catalog, and the image model catalog
-         (image-catalog.json) for GET /catalog/images. The sentinels must appear
-         only in set-body: they are replaced everywhere, and the catalog text is
-         not valid inside an XML comment. The two catalogs are separate on
-         purpose: clients that build a chat model list from /catalog must never
-         see an image model. -->
+         (model-catalog.json) for GET /catalog, the image model catalog
+         (image-catalog.json) for GET /catalog/images, and the embedding model
+         catalog (embedding-catalog.json) for GET /catalog/embeddings. The
+         sentinels must appear only in set-body: they are replaced everywhere,
+         and the catalog text is not valid inside an XML comment. The catalogs
+         are separate on purpose: clients that build a chat model list from
+         /catalog must never see an image or an embedding model. -->
     <choose>
       <when condition="@(context.Operation.Id == &quot;getImageCatalog&quot;)">
         <return-response>
@@ -25,6 +26,15 @@
             <value>application/json</value>
           </set-header>
           <set-body>__IMAGE_CATALOG_JSON__</set-body>
+        </return-response>
+      </when>
+      <when condition="@(context.Operation.Id == &quot;getEmbeddingCatalog&quot;)">
+        <return-response>
+          <set-status code="200" reason="OK" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/json</value>
+          </set-header>
+          <set-body>__EMBEDDING_CATALOG_JSON__</set-body>
         </return-response>
       </when>
       <otherwise>

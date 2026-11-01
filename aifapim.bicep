@@ -123,6 +123,9 @@ param catalogJson string
 @description('Image model catalog JSON array (id/name/provider/create/edit/routes/residency per image model). Populated in the bicepparam file via loadTextContent(\'./image-catalog.json\'). Baked into the GET /catalog/images return-response policy at deploy time. Kept apart from catalogJson so that clients building a chat model list never see an image model.')
 param imageCatalogJson string = '[]'
 
+@description('Embedding model catalog JSON array (id/name/provider/dimensions/max_input_tokens/route/residency per embedding model). Populated in the bicepparam file via loadTextContent(\'./embedding-catalog.json\'). Baked into the GET /catalog/embeddings return-response policy at deploy time. Kept apart from catalogJson because an embedding model has format OpenAI and would be offered to chat clients as a chat model.')
+param embeddingCatalogJson string = '[]'
+
 @description('Store the raw body of every POST to the three inference APIs in a write-once (WORM) blob, and load a searchable copy into a separate Log Analytics workspace. The built-in LLM log drops the prompt of Claude requests whose system field is a list of blocks. Off by default: it needs a subnet, storage, a function app, private endpoints and an Azure Monitor private link scope, and the stored bodies contain whatever users send.')
 param requestBodyLogging bool = false
 
@@ -200,12 +203,14 @@ var maiApiXml = replace(replace(replace(replace(loadTextContent('apim_policies/M
 
 // Catalog API policy: static return-response, no backend.
 // Sentinels replaced: __ALLOWED_CLIENT_IPS__ (IP filter), __CATALOG_JSON__ (chat model list
-// body) and __IMAGE_CATALOG_JSON__ (image model list body).
+// body), __IMAGE_CATALOG_JSON__ (image model list body) and __EMBEDDING_CATALOG_JSON__
+// (embedding model list body).
 // The JSON is XML-escaped (& first) because it lands in element text; APIM
 // unescapes it, so the response body is the original JSON.
 var catalogJsonXml = replace(replace(replace(catalogJson, '&', '&amp;'), '<', '&lt;'), '>', '&gt;')
+var embeddingCatalogJsonXml = replace(replace(replace(embeddingCatalogJson, '&', '&amp;'), '<', '&lt;'), '>', '&gt;')
 var imageCatalogJsonXml = replace(replace(replace(imageCatalogJson, '&', '&amp;'), '<', '&lt;'), '>', '&gt;')
-var catalogApiXml = replace(replace(replace(loadTextContent('apim_policies/Catalog_Policy.xml'), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__IMAGE_CATALOG_JSON__', imageCatalogJsonXml), '__CATALOG_JSON__', catalogJsonXml)
+var catalogApiXml = replace(replace(replace(replace(loadTextContent('apim_policies/Catalog_Policy.xml'), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__EMBEDDING_CATALOG_JSON__', embeddingCatalogJsonXml), '__IMAGE_CATALOG_JSON__', imageCatalogJsonXml), '__CATALOG_JSON__', catalogJsonXml)
 
 // Azure OpenAI data-plane inference spec is pinned locally so deployments are
 // deterministic and do not depend on github.com being reachable at deploy time.

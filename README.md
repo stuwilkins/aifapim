@@ -204,8 +204,9 @@ Image models are billed and limited per image, not per token: the token
 limit and token metric policies are skipped for `/images/` requests, and the
 policies emit an `Image Count` metric instead (same namespace and dimensions
 as the token metrics). They are not listed in `GET /catalog`, which holds
-chat models only: `GET /catalog/images` lists them, with the gateway route to
-use for each, because the routes differ between model families.
+chat models only. `GET /catalog/images` lists them, and
+`GET /catalog/embeddings` lists the embedding models. Each image entry gives
+the gateway route to use, because the routes differ between model families.
 
 ### Example: MAI and GPT image models
 
@@ -415,7 +416,7 @@ api_definitions/
   AzureAnthropic_OpenAPI.json            # Anthropic OpenAPI spec imported into APIM
   BlackForestLabs_OpenAPI.json           # FLUX.2-pro (Black Forest Labs route) OpenAPI spec
   MAI_Image_OpenAPI.json                 # MAI image OpenAPI spec
-  Catalog_OpenAPI.json                   # GET /catalog and /catalog/images static model lists
+  Catalog_OpenAPI.json                   # GET /catalog, /catalog/images and /catalog/embeddings static model lists
 resources/                       # User-supplied CA PEMs loaded via loadTextContent
                                  # in the bicepparam file. Directory is gitignored
                                  # aside from a .gitkeep; see "Custom Domains & TLS".

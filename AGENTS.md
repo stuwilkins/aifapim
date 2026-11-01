@@ -177,7 +177,8 @@ Fetch the keys with
     Output is always one PNG; width and height are at least 768 with a total of
     at most 2,359,296 pixels. Grouped under `apimProductName` product and the
     service products.
-  - `catalog-api` — path `catalog`, `GET /catalog` and `GET /catalog/images`.
+  - `catalog-api` — path `catalog`, `GET /catalog`, `GET /catalog/images` and
+    `GET /catalog/embeddings`.
     `/catalog` returns a static
     JSON array of chat-LLM models with `id`, `name`, `provider`, `context`,
     and `output` fields baked in at deploy time from `model-catalog.json`
@@ -190,6 +191,14 @@ Fetch the keys with
     list from every `OpenAI` entry of `/catalog`, so an image model there would
     be offered as a chat model and fail. The policy picks the body by
     operation id (`getImageCatalog`).
+    `/catalog/embeddings` returns the embedding models, baked in from
+    `embedding-catalog.json` (the `embeddingCatalogJson` param): `id`, `name`,
+    `provider`, `dimensions` (the default vector length),
+    `dimensions_adjustable`, `max_input_tokens`, `route`, `residency`,
+    `retires` and `notes`. It is separate for the same reason as the image
+    catalog: an embedding model has provider `OpenAI`, so in `/catalog` it would
+    be offered as a chat model. Operation id `getEmbeddingCatalog`. The
+    Llama models are served but are in no catalog, on purpose.
     Grouped under its own **`aifapim-catalog` product** (shown as "NSLS-II AIF
     APIM Services (catalog poller)") — keys scoped to this product cannot call
     any inference endpoint — and also in the user and service products. No
@@ -199,7 +208,8 @@ Fetch the keys with
     **Route composition note:** APIM constructs the gateway route as
     `<API path> + <operation urlTemplate>`. The catalog API uses
     `path = 'catalog'` and `urlTemplate = '/'`, giving the effective route
-    `/catalog`; the `/images` operation gives `/catalog/images`. Do **not**
+    `/catalog`; the `/images` and `/embeddings` operations give
+    `/catalog/images` and `/catalog/embeddings`. Do **not**
     put `/catalog` in the OpenAPI operation path — that doubles the segment to
     `/catalog/catalog` and produces a 404.
 - **Products** (the same on dev and prod). A key's product decides which
@@ -473,7 +483,7 @@ api_definitions/                # OpenAPI specs (loaded inline via loadTextConte
                                 #   AzureAnthropic_OpenAPI.json            (Anthropic Messages API)
                                 #   BlackForestLabs_OpenAPI.json           (POST /flux-2-pro; Black Forest Labs route)
                                 #   MAI_Image_OpenAPI.json                 (POST /images/generations and /images/edits)
-                                #   Catalog_OpenAPI.json                   (GET /catalog and /catalog/images; static model lists)
+                                #   Catalog_OpenAPI.json                   (GET /catalog, /catalog/images and /catalog/embeddings; static model lists)
 resources/                      # User-supplied CA PEMs loaded via loadTextContent
                                 # in the bicepparam file (intermediateCaCert /
                                 # rootCaCert params). Gitignored except .gitkeep.
