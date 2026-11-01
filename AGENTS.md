@@ -165,10 +165,31 @@ Fetch the keys with
     `BlackForestLabs_OpenAPI.json` (the policy is model-neutral except the
     `Model` dimension and the failover check). Grouped under `apimProductName`
     product and the service products.
-  - `catalog-api` — path `catalog`, `GET /catalog` only. Returns a static
+  - `mai-image-api` — path `mai/v1`, `POST /images/generations` (JSON) and
+    `POST /images/edits` (multipart, up to five reference images). Microsoft's
+    MAI image models use these routes on the account's `services.ai.azure.com`
+    host; the path is Azure's own. The models (`MAI-Image-2.6`,
+    `MAI-Image-2.6-Flash`) are deployed in the **secondary** (`eus`) account
+    only, so there is one backend (`mai-backend`) and no failover; 429 and 5xx
+    are retried on it. The policy refuses `web_grounding: true` with HTTP 400,
+    because that option sends the prompt to Bing, outside Foundry, and keeps
+    only a plain deployment name as the `Model` dimension of `Image Count`.
+    Output is always one PNG; width and height are at least 768 with a total of
+    at most 2,359,296 pixels. Grouped under `apimProductName` product and the
+    service products.
+  - `catalog-api` — path `catalog`, `GET /catalog` and `GET /catalog/images`.
+    `/catalog` returns a static
     JSON array of chat-LLM models with `id`, `name`, `provider`, `context`,
     and `output` fields baked in at deploy time from `model-catalog.json`
     (in the `aifapim-config` repo, passed as the `catalogJson` param).
+    `/catalog/images` returns the image models, baked in from
+    `image-catalog.json` (the `imageCatalogJson` param): `id`, `name`,
+    `provider`, `create`, `edit`, `routes` (the gateway route for each
+    operation, because the families differ), `residency` and `retires`. It is
+    separate on purpose: ansible builds each workstation's OpenCode model
+    list from every `OpenAI` entry of `/catalog`, so an image model there would
+    be offered as a chat model and fail. The policy picks the body by
+    operation id (`getImageCatalog`).
     Grouped under its own **`aifapim-catalog` product** (shown as "NSLS-II AIF
     APIM Services (catalog poller)") — keys scoped to this product cannot call
     any inference endpoint — and also in the user and service products. No
@@ -178,17 +199,18 @@ Fetch the keys with
     **Route composition note:** APIM constructs the gateway route as
     `<API path> + <operation urlTemplate>`. The catalog API uses
     `path = 'catalog'` and `urlTemplate = '/'`, giving the effective route
-    `/catalog`. Do **not** put `/catalog` in the OpenAPI operation path — that
-    doubles the segment to `/catalog/catalog` and produces a 404.
+    `/catalog`; the `/images` operation gives `/catalog/images`. Do **not**
+    put `/catalog` in the OpenAPI operation path — that doubles the segment to
+    `/catalog/catalog` and produces a 404.
 - **Products** (the same on dev and prod). A key's product decides which
   product-level policy applies to it, and a subscription's scope can be changed
   in place (`PATCH` `properties.scope`), keeping its name and key values.
 
   | Product ID | Display name | APIs | Keys | Product policy |
   | --- | --- | --- | --- | --- |
-  | `apimProductName` (`nsls2aifapim`) | NSLS-II AIF APIM | 4 inference + `catalog-api` | people only: one key each, named by the Entra object id | none |
-  | `nsls2aifapim-services-external` | NSLS-II AIF APIM Services (external) | 4 inference + `catalog-api` | services (`svc-...`) | none |
-  | `nsls2aifapim-services-internal` | NSLS-II AIF APIM Services (internal) | 4 inference + `catalog-api` | on-site services | `ip-filter`: the NSLS-II NAT pool `130.199.137.0/28` |
+  | `apimProductName` (`nsls2aifapim`) | NSLS-II AIF APIM | 5 inference + `catalog-api` | people only: one key each, named by the Entra object id | none |
+  | `nsls2aifapim-services-external` | NSLS-II AIF APIM Services (external) | 5 inference + `catalog-api` | services (`svc-...`) | none |
+  | `nsls2aifapim-services-internal` | NSLS-II AIF APIM Services (internal) | 5 inference + `catalog-api` | on-site services | `ip-filter`: the NSLS-II NAT pool `130.199.137.0/28` |
   | `aifapim-catalog` | NSLS-II AIF APIM Services (catalog poller) | `catalog-api` | `svc-catalog-poller` | none |
 
   The service products come from the `serviceProducts` parameter (each
@@ -249,8 +271,8 @@ Fetch the keys with
   secondary (eastus) is counterproductive because eastus carries fewer
   models, and once a retry switches to the secondary the policy never
   returns to the primary, so the secondary's 404 hides the real error
-  (for example a 429 from eastus2). The retry condition in all four of
-  `apim_policies/{AOAI,OpenAIv1Messages,Anthropic,BlackForestLabs}_Policy-Managed_Identity_with_Retry_MultiRegion.xml`
+  (for example a 429 from eastus2). The retry condition in all five of
+  `apim_policies/{AOAI,OpenAIv1Messages,Anthropic,BlackForestLabs,MAI_Image}_Policy-Managed_Identity_with_Retry[_MultiRegion].xml`
   only retries on 429 (rate limit) and 5xx (server errors). Do not add 404
   back. Do not add `<base />` to the `<backend>` section either: APIM
   allows one backend policy, and `<base />` plus `<retry>` fails deploy
@@ -293,11 +315,14 @@ Fetch the keys with
     policy reads `model` from the multipart form text when the body is not
     JSON, because edits are multipart.
   - They are not added to `model-catalog.json`: `/catalog` lists chat models
-    with token windows only.
+    with token windows only. Image models are in `/catalog/images`.
   - The other image models (`gpt-image-*`, `MAI-Image-*`, `FLUX.2-flex`) offer
-    only `GlobalStandard`, which can process outside the US. As of 2026-10,
-    `gpt-image-1.5` is the only OpenAI image model with `DataZoneStandard`; it
-    is eastus2-only and retires 2026-12-16, so it is not deployed here.
+    only `GlobalStandard`, which can process outside the US. The operator
+    accepted that for image models on 2026-11-01, so `gpt-image-2.5-flare`,
+    `gpt-image-2.5-sunburst`, `MAI-Image-2.6` and `MAI-Image-2.6-Flash` are
+    deployed as `GlobalStandard`; the `/catalog/images` entry says `Global`.
+    The `gpt-image-*` models use the OpenAI v1 image routes (they are in
+    eastus2 only), the MAI models the `mai-image-api` (eastus only).
 - **APIM authenticates to AI Foundry via system-assigned managed identity**
   (no API keys to backends). End-users authenticate to APIM via APIM
   subscription keys.
@@ -335,7 +360,7 @@ Fetch the keys with
   `system` is logged, a list is not, with or without `cache_control`; replies
   are still logged), which is what Claude Code and OpenCode send. When the
   switch is true, `apim_policies/RequestBodyLog_Fragment.xml` replaces the
-  `<!-- __REQUEST_LOG__ -->` marker in `<inbound>` of the four inference
+  `<!-- __REQUEST_LOG__ -->` marker in `<inbound>` of the five inference
   policies. It writes the raw body of every POST to a write-once blob with
   `<send-one-way-request>` (managed identity, `If-None-Match: *`, fire and
   forget, name = request id = `CorrelationId`). `modules/request-log.bicep`
@@ -399,7 +424,7 @@ Fetch the keys with
   certificates) in Key Vault. A user-assigned managed identity is created and
   granted Key Vault Secrets User *before* APIM is deployed to solve the
   chicken-and-egg problem.
-- **IP filtering**: All four inference policies share an inbound
+- **IP filtering**: All five inference policies share an inbound
   `<ip-filter action="allow">` block populated at deploy time from the
   `allowedClientIps` parameter in the bicepparam files. Entries may be bare
   IPv4 addresses or CIDR ranges (CIDR is expanded via
@@ -421,7 +446,7 @@ modules/
   aif.bicep                     # AI Foundry account + private endpoint
   aif-deployments.bicep         # Model deployments (sub-module; avoids race on account provisioning)
   api-management-private.bicep  # APIM instance, custom domains, CA certs
-  api.bicep                     # All four inference APIs, the catalog API, backends, product, diagnostics
+  api.bicep                     # All five inference APIs, the catalog API, backends, product, diagnostics
   app-insights.bicep            # Application Insights
   cognitive-services-role.bicep # Cognitive Services / AI User RBAC for APIM system identity
   event-hub.bicep               # Event Hub namespace (private endpoint only; not wired to an APIM logger yet)
@@ -438,15 +463,17 @@ modules/
   storage-private-endpoint.bicep # Private endpoint + DNS zone group for a storage account
   vnet.bicep                    # Virtual network
 apim_policies/                  # APIM policy XML (loaded inline via loadTextContent)
-                                #   RequestBodyLog_Fragment.xml  (inserted into the four inference policies)
+                                #   RequestBodyLog_Fragment.xml  (inserted into the five inference policies)
                                 #   BlackForestLabs_Policy-...MultiRegion.xml  (FLUX.2-pro provider route)
+                                #   MAI_Image_Policy-...Retry.xml  (MAI image routes; one backend)
                                 #   Catalog_Policy.xml  (return-response; no backend)
 api_definitions/                # OpenAPI specs (loaded inline via loadTextContent):
                                 #   AzureOpenAI_inference_2024-10-21.yaml  (root API; vendored from azure-rest-api-specs)
                                 #   AzureOpenAI_v1_Messages_OpenAPI.json   (v1 Messages API)
                                 #   AzureAnthropic_OpenAPI.json            (Anthropic Messages API)
                                 #   BlackForestLabs_OpenAPI.json           (POST /flux-2-pro; Black Forest Labs route)
-                                #   Catalog_OpenAPI.json                   (GET /catalog; static model list)
+                                #   MAI_Image_OpenAPI.json                 (POST /images/generations and /images/edits)
+                                #   Catalog_OpenAPI.json                   (GET /catalog and /catalog/images; static model lists)
 resources/                      # User-supplied CA PEMs loaded via loadTextContent
                                 # in the bicepparam file (intermediateCaCert /
                                 # rootCaCert params). Gitignored except .gitkeep.
@@ -509,8 +536,8 @@ On Developer SKU APIM (`apiManagementSku = 'Developer'`, single unit, no
 redundancy) every `az deployment group create` triggers a service-level
 mutation, and the single-instance service transitions while child writes
 land. With unserialized fan-out across the ~19 child resources in
-`modules/api.bicep` (backends, four APIs, four policies, four per-API
-diagnostics, service diagnostic, product, four product/api links), ARM
+`modules/api.bicep` (backends, five APIs, five policies, five per-API
+diagnostics, service diagnostic, product, five product/api links), ARM
 deterministically fails the `api-management` nested deployment with
 `ServiceLocked: The API Service apim-<unique> is transitioning at this
 time`. The service itself is healthy (`provisioningState: Succeeded`)

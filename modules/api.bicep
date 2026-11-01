@@ -33,6 +33,24 @@ param bflApiXml string
 @description('Inline OpenAPI (JSON) spec defining the Black Forest Labs API operations.')
 param bflOpenApiSpec string
 
+@description('Backend URL of the MAI image API (ends in /mai/v1). The MAI models are deployed in the secondary region only, so there is one backend.')
+param maiServiceUrl string
+
+@description('Resource name and id for the MAI image API.')
+param maiApiName string
+
+@description('Display name for the MAI image API.')
+param maiApiDisplayName string
+
+@description('Path suffix for the MAI image API (the same path Azure uses).')
+param maiApiPath string
+
+@description('Inline policy XML for the MAI image API.')
+param maiApiXml string
+
+@description('Inline OpenAPI (JSON) spec defining the MAI image API operations.')
+param maiOpenApiSpec string
+
 @description('Display name and id for the Azure OpenAI v1 Messages API.')
 param openaiV1MessagesApiName string
 
@@ -213,10 +231,21 @@ resource bflSecondaryBackend 'Microsoft.ApiManagement/service/backends@2023-03-0
   }
 }
 
+resource maiBackend 'Microsoft.ApiManagement/service/backends@2023-03-01-preview' = {
+  name: 'mai-backend'
+  parent: parentAPIM
+  dependsOn: [bflSecondaryBackend]
+  properties: {
+    description: 'MAI image endpoint (secondary region only)'
+    protocol: 'http'
+    url: maiServiceUrl
+  }
+}
+
 resource api 'Microsoft.ApiManagement/service/apis@2023-03-01-preview' = {
   parent: parentAPIM
   name: apiName
-  dependsOn: [bflSecondaryBackend]
+  dependsOn: [maiBackend]
   properties: {
     displayName: openaiApiDisplayName
     description: 'Azure OpenAI data-plane inference API. Supports chat completions, embeddings, and model listing operations.'
@@ -546,12 +575,76 @@ resource bflDiagnostic 'Microsoft.ApiManagement/service/apis/diagnostics@2024-06
   }
 }
 
+// --- MAI image API ---
+//
+// The MAI image models use Microsoft's own image routes (mai/v1/images/...),
+// which differ from the OpenAI ones, and are deployed in the secondary region
+// only. The API path is the path Azure uses.
+
+resource maiApi 'Microsoft.ApiManagement/service/apis@2023-03-01-preview' = {
+  parent: parentAPIM
+  name: maiApiName
+  dependsOn: [bflDiagnostic]
+  properties: {
+    displayName: maiApiDisplayName
+    description: 'Microsoft MAI image API for MAI-Image-2.6 and MAI-Image-2.6-Flash image creation and editing.'
+    path: maiApiPath
+    protocols: [
+      'https'
+    ]
+    subscriptionRequired: true
+    subscriptionKeyParameterNames: {
+      header: 'x-api-key'
+      query: 'subscription-key'
+    }
+    format: 'openapi+json'
+    value: maiOpenApiSpec
+  }
+}
+
+resource maiApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2023-03-01-preview' = {
+  parent: maiApi
+  name: 'policy'
+  properties: {
+    format: 'xml'
+    value: maiApiXml
+  }
+}
+
+resource maiDiagnostic 'Microsoft.ApiManagement/service/apis/diagnostics@2024-06-01-preview' = {
+  parent: maiApi
+  dependsOn: [maiApiPolicy]
+  name: 'applicationinsights'
+  properties: {
+    alwaysLog: 'allErrors'
+    httpCorrelationProtocol: 'Legacy'
+    verbosity: 'information'
+    logClientIp: true
+    loggerId: aiLoggerId
+    metrics: true
+    sampling: {
+      samplingType: 'fixed'
+      percentage: 100
+    }
+    frontend: {
+      request: {
+        headers: loggedRequestHeaders
+        body: { bytes: 0 }
+      }
+      response: {
+        headers: []
+        body: { bytes: 0 }
+      }
+    }
+  }
+}
+
 // --- APIM product: groups all APIs under a single product ---
 
 resource apimProduct 'Microsoft.ApiManagement/service/products@2023-03-01-preview' = {
   parent: parentAPIM
   name: apimProductName
-  dependsOn: [bflDiagnostic]
+  dependsOn: [maiDiagnostic]
   properties: {
     displayName: apimProductDisplayName
     description: apimProductDescription
@@ -587,16 +680,23 @@ resource apimProductBflApi 'Microsoft.ApiManagement/service/products/apis@2023-0
   dependsOn: [apimProductOpenAiV1MessagesApi]
 }
 
+resource apimProductMaiApi 'Microsoft.ApiManagement/service/products/apis@2023-03-01-preview' = {
+  parent: apimProduct
+  name: maiApi.name
+  dependsOn: [apimProductBflApi]
+}
+
 // --- Catalog API: static return-response, no backend ---
 //
-// GET /catalog returns the curated model list baked in at deploy time.
+// GET /catalog returns the curated chat model list and GET /catalog/images the
+// image model list, both baked in at deploy time.
 // Chained after the main product associations to maintain the linear
 // dependsOn serialization required on Developer SKU APIM.
 
 resource catalogApi 'Microsoft.ApiManagement/service/apis@2023-03-01-preview' = {
   parent: parentAPIM
   name: catalogApiName
-  dependsOn: [apimProductBflApi]
+  dependsOn: [apimProductMaiApi]
   properties: {
     displayName: catalogApiDisplayName
     description: 'Returns the curated list of chat-LLM models with provider, context window, and max output tokens. Body is static and baked in at deploy time — no backend call is made.'
@@ -656,7 +756,7 @@ resource apimProductCatalogApi 'Microsoft.ApiManagement/service/products/apis@20
 
 // --- Service products ---
 //
-// Same APIs as the user product (the four inference APIs and the catalog API).
+// Same APIs as the user product (the five inference APIs and the catalog API).
 // A product-level policy (the NAT-pool lock) is added when the entry has one.
 // Everything is written one at a time, in this order: products, then their API
 // links, then their policies.
@@ -680,6 +780,7 @@ var serviceProductApiNames = [
   openaiV1MessagesApiName
   anthropicApiName
   bflApiName
+  maiApiName
   catalogApiName
 ]
 var serviceProductApiLinks = flatten(map(range(0, length(serviceProducts)), i => map(serviceProductApiNames, a => {

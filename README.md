@@ -204,7 +204,49 @@ Image models are billed and limited per image, not per token: the token
 limit and token metric policies are skipped for `/images/` requests, and the
 policies emit an `Image Count` metric instead (same namespace and dimensions
 as the token metrics). They are not listed in `GET /catalog`, which holds
-chat models only.
+chat models only: `GET /catalog/images` lists them, with the gateway route to
+use for each, because the routes differ between model families.
+
+### Example: MAI and GPT image models
+
+`MAI-Image-2.6` and `MAI-Image-2.6-Flash` use Microsoft's MAI routes, on the
+gateway at the path Azure uses: `POST /mai/v1/images/generations` (JSON with
+`model`, `prompt`, `width`, `height`) and `POST /mai/v1/images/edits` (multipart
+with `model`, `prompt` and up to five `image` files). Both return one PNG in
+`data[0].b64_json`. Width and height are at least 768, with a total of at most
+2,359,296 pixels. `web_grounding: true` is refused with HTTP 400, because it
+sends the prompt to Bing. These are `GlobalStandard` deployments, so prompts
+may be processed outside the US.
+
+`gpt-image-2.5-flare` (fast) and `gpt-image-2.5-sunburst` (best for precise
+edits) use the OpenAI v1 routes, `/openai/v1/images/generations` and
+`/openai/v1/images/edits` with `api-version=preview`, like the FLUX models, and
+are also `GlobalStandard`. The `gpt-image` models are billed by token, so the
+quality setting affects the cost.
+
+```python
+import base64
+import os
+
+import requests
+
+endpoint = f"https://{os.environ['AIFAPIM_HOST']}"
+headers = {"x-api-key": os.environ["AIFAPIM_API_KEY"]}
+
+response = requests.post(
+    f"{endpoint}/mai/v1/images/generations",
+    headers=headers,
+    json={
+        "model": "MAI-Image-2.6",
+        "prompt": "A calm abstract illustration of teal light beams, no text",
+        "width": 1024,
+        "height": 1024,
+    },
+    timeout=180,
+)
+response.raise_for_status()
+png = base64.b64decode(response.json()["data"][0]["b64_json"])
+```
 
 ### Example: OpenCode configuration
 
@@ -325,7 +367,7 @@ Pay particular attention to:
   documentation IPs that cannot route real traffic; replace them.
 - `regions` and `modelDeployments` — nested arrays; outer indices of
   `modelDeployments` must align with `regions[*]`.
-- `apimProductName` — the APIM product the four inference APIs (and the
+- `apimProductName` — the APIM product the five inference APIs (and the
   catalog API) are grouped under, and the App Insights custom-metric namespace.
 - `serviceProducts` — optional extra products for service keys, each
   `{ name, displayName, description, allowedClientIps? }` with the same four
@@ -365,13 +407,15 @@ apim_policies/
   OpenAIv1Messages_Policy-Managed_Identity_with_Retry_MultiRegion.xml  # AOAI v1 Messages multi-region with failover
   Anthropic_Policy-Managed_Identity_with_Retry_MultiRegion.xml  # Anthropic multi-region with failover
   BlackForestLabs_Policy-Managed_Identity_with_Retry_MultiRegion.xml  # FLUX.2-pro provider route with failover
+  MAI_Image_Policy-Managed_Identity_with_Retry.xml  # MAI image routes, one backend
   Catalog_Policy.xml                                             # Static return-response; no backend
 api_definitions/
   AzureOpenAI_inference_2024-10-21.yaml  # AOAI data-plane inference spec; vendored from azure-rest-api-specs
   AzureOpenAI_v1_Messages_OpenAPI.json   # AOAI v1 Messages OpenAPI spec imported into APIM
   AzureAnthropic_OpenAPI.json            # Anthropic OpenAPI spec imported into APIM
   BlackForestLabs_OpenAPI.json           # FLUX.2-pro (Black Forest Labs route) OpenAPI spec
-  Catalog_OpenAPI.json                   # GET /catalog static model list
+  MAI_Image_OpenAPI.json                 # MAI image OpenAPI spec
+  Catalog_OpenAPI.json                   # GET /catalog and /catalog/images static model lists
 resources/                       # User-supplied CA PEMs loaded via loadTextContent
                                  # in the bicepparam file. Directory is gitignored
                                  # aside from a .gitkeep; see "Custom Domains & TLS".
@@ -393,8 +437,8 @@ All policies include:
   provider-side egress IPs you need to allow (for example, the Anthropic
   egress IPs needed for `/anthropic/*` traffic on Foundry).
 
-The four **inference** policies (`AOAI`, `OpenAIv1Messages`, `Anthropic`, `BlackForestLabs`)
-additionally include:
+The five **inference** policies (`AOAI`, `OpenAIv1Messages`, `Anthropic`,
+`BlackForestLabs`, `MAI_Image`) additionally include:
 
 - **Managed Identity auth**: APIM authenticates to AI Foundry backends
   using its system-assigned identity
@@ -612,7 +656,7 @@ critical for downstream tooling, options are:
 ### Request body log
 
 Because of item 5 above, the stack can optionally keep the raw body of every
-POST to the four inference APIs. Set `requestBodyLogging = true` (and
+POST to the five inference APIs. Set `requestBodyLogging = true` (and
 `requestLogSubnetIPPrefix`, `requestLogReaderGroupObjectId`) in the parameter
 file. The gateway writes each body to a write-once (WORM) blob named by the
 request id (`CorrelationId` in `ApiManagementGatewayLogs`), and a Flex

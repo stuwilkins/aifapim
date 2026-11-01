@@ -1,0 +1,146 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Microsoft MAI image API",
+    "description": "Microsoft MAI image models (MAI-Image-2.6 and MAI-Image-2.6-Flash). The path is the same as on Azure (mai/v1), so Azure's own examples work by changing the host and the key header. The output is always one PNG. Web grounding is not available through this gateway.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/images/generations": {
+      "post": {
+        "operationId": "createMaiImage",
+        "summary": "Create an image from a text prompt",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "model",
+                  "prompt"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "description": "The deployment name, for example MAI-Image-2.6.",
+                    "example": "MAI-Image-2.6"
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "width": {
+                    "type": "integer",
+                    "description": "At least 768. Width times height must not exceed 2,359,296.",
+                    "example": 1024
+                  },
+                  "height": {
+                    "type": "integer",
+                    "description": "At least 768. Width times height must not exceed 2,359,296.",
+                    "example": 1024
+                  },
+                  "auto_aspect_ratio": {
+                    "type": "boolean",
+                    "description": "Let the model choose the aspect ratio."
+                  },
+                  "web_grounding": {
+                    "type": "boolean",
+                    "description": "Not available: the gateway answers 400 when this is true."
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The generated image.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/images/edits": {
+      "post": {
+        "operationId": "createMaiImageEdit",
+        "summary": "Edit images with a text prompt",
+        "description": "Multipart form data. Repeat the image field for each reference image, up to five (JPEG or PNG).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "model",
+                  "prompt",
+                  "image"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "example": "MAI-Image-2.6"
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "image": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "auto_aspect_ratio": {
+                    "type": "boolean"
+                  },
+                  "web_grounding": {
+                    "type": "boolean",
+                    "description": "Not available: the gateway answers 400 when this is true."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The edited image.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ImageResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "b64_json": {
+                  "type": "string",
+                  "description": "Base64-encoded PNG."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

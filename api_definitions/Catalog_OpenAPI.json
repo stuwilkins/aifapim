@@ -19,23 +19,114 @@
                   "type": "array",
                   "items": {
                     "type": "object",
-                    "required": ["id", "name", "provider", "context", "output"],
+                    "required": [
+                      "id",
+                      "name",
+                      "provider",
+                      "context",
+                      "output"
+                    ],
                     "properties": {
-                      "id":       { "type": "string",  "description": "Model deployment name (pass as 'model' in API requests)" },
-                      "name":     { "type": "string",  "description": "Human-readable display name" },
-                      "provider": { "type": "string",  "description": "Model provider (OpenAI or Anthropic)" },
-                      "context":  { "type": "integer", "description": "Maximum context window in tokens" },
-                      "output":   { "type": "integer", "description": "Maximum output tokens" }
+                      "id": {
+                        "type": "string",
+                        "description": "Model deployment name (pass as 'model' in API requests)"
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "Human-readable display name"
+                      },
+                      "provider": {
+                        "type": "string",
+                        "description": "Model provider (OpenAI or Anthropic)"
+                      },
+                      "context": {
+                        "type": "integer",
+                        "description": "Maximum context window in tokens"
+                      },
+                      "output": {
+                        "type": "integer",
+                        "description": "Maximum output tokens"
+                      }
                     }
                   }
                 }
               }
             }
           },
-          "401": { "description": "Missing or invalid subscription key" },
-          "403": { "description": "Client IP not in allow-list" }
+          "401": {
+            "description": "Missing or invalid subscription key"
+          },
+          "403": {
+            "description": "Client IP not in allow-list"
+          }
         },
-        "security": [{ "apiKeyHeader": [] }]
+        "security": [
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/images": {
+      "get": {
+        "operationId": "getImageCatalog",
+        "summary": "List all available image models with their routes and limits",
+        "description": "Image models are not in GET /catalog. Each entry says which gateway route creates and edits images with that model, because the routes differ between model families.",
+        "responses": {
+          "200": {
+            "description": "Array of image model entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "name",
+                      "provider",
+                      "create",
+                      "edit",
+                      "routes",
+                      "residency"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Model deployment name (pass as 'model' in API requests)"
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "Human-readable display name"
+                      },
+                      "provider": {
+                        "type": "string"
+                      },
+                      "create": {
+                        "type": "boolean"
+                      },
+                      "edit": {
+                        "type": "boolean"
+                      },
+                      "routes": {
+                        "type": "object",
+                        "description": "Gateway route for each operation: method, path and query"
+                      },
+                      "residency": {
+                        "type": "string",
+                        "description": "DataZone (processed in the US data zone) or Global (may be processed outside the US)"
+                      },
+                      "retires": {
+                        "type": "string",
+                        "description": "Date Microsoft retires the model (YYYY-MM-DD)"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   },

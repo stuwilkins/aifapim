@@ -120,6 +120,9 @@ param serviceProducts array = []
 @description('Curated model catalog JSON array (id/name/provider/context/output per chat-LLM model). Populated in the bicepparam file via loadTextContent(\'./model-catalog.json\'). Baked into the GET /catalog return-response policy at deploy time.')
 param catalogJson string
 
+@description('Image model catalog JSON array (id/name/provider/create/edit/routes/residency per image model). Populated in the bicepparam file via loadTextContent(\'./image-catalog.json\'). Baked into the GET /catalog/images return-response policy at deploy time. Kept apart from catalogJson so that clients building a chat model list never see an image model.')
+param imageCatalogJson string = '[]'
+
 @description('Store the raw body of every POST to the three inference APIs in a write-once (WORM) blob, and load a searchable copy into a separate Log Analytics workspace. The built-in LLM log drops the prompt of Claude requests whose system field is a list of blocks. Off by default: it needs a subnet, storage, a function app, private endpoints and an Azure Monitor private link scope, and the stored bodies contain whatever users send.')
 param requestBodyLogging bool = false
 
@@ -192,12 +195,17 @@ var openaiV1MessagesApiXml = replace(replace(replace(replace(replace(loadTextCon
 // Black Forest Labs API policy (multi-region retry variant).
 var bflApiXml = replace(replace(replace(replace(replace(loadTextContent('apim_policies/BlackForestLabs_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), '__SECONDARY_MODELS__', secondaryModelList), requestLogMarker, requestLogPolicyXml)
 
+// MAI image API policy (one backend, no failover: the models are in the secondary region only).
+var maiApiXml = replace(replace(replace(replace(loadTextContent('apim_policies/MAI_Image_Policy-Managed_Identity_with_Retry.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), requestLogMarker, requestLogPolicyXml)
+
 // Catalog API policy: static return-response, no backend.
-// Sentinels replaced: __ALLOWED_CLIENT_IPS__ (IP filter) and __CATALOG_JSON__ (model list body).
+// Sentinels replaced: __ALLOWED_CLIENT_IPS__ (IP filter), __CATALOG_JSON__ (chat model list
+// body) and __IMAGE_CATALOG_JSON__ (image model list body).
 // The JSON is XML-escaped (& first) because it lands in element text; APIM
 // unescapes it, so the response body is the original JSON.
 var catalogJsonXml = replace(replace(replace(catalogJson, '&', '&amp;'), '<', '&lt;'), '>', '&gt;')
-var catalogApiXml = replace(replace(loadTextContent('apim_policies/Catalog_Policy.xml'), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__CATALOG_JSON__', catalogJsonXml)
+var imageCatalogJsonXml = replace(replace(replace(imageCatalogJson, '&', '&amp;'), '<', '&lt;'), '>', '&gt;')
+var catalogApiXml = replace(replace(replace(loadTextContent('apim_policies/Catalog_Policy.xml'), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__IMAGE_CATALOG_JSON__', imageCatalogJsonXml), '__CATALOG_JSON__', catalogJsonXml)
 
 // Azure OpenAI data-plane inference spec is pinned locally so deployments are
 // deterministic and do not depend on github.com being reachable at deploy time.
@@ -224,6 +232,10 @@ var anthropicApiDisplayName = 'Anthropic Service API'
 var bflApiName = 'black-forest-labs-api'
 var bflApiPath = 'providers/blackforestlabs/v1'
 var bflApiDisplayName = 'Black Forest Labs FLUX API'
+
+var maiApiName = 'mai-image-api'
+var maiApiPath = 'mai/v1'
+var maiApiDisplayName = 'Microsoft MAI Image API'
 
 var catalogApiName = 'catalog-api'
 var catalogApiPath = 'catalog'
@@ -382,6 +394,7 @@ var anthropicServiceUrlPrimary = 'https://${apiServiceNamePrimary}.services.ai.a
 var anthropicServiceUrlSecondary = 'https://${apiServiceNameSecondary}.services.ai.azure.com/anthropic'
 var bflServiceUrlPrimary = 'https://${apiServiceNamePrimary}.${bflEndpointDomain}/providers/blackforestlabs/v1'
 var bflServiceUrlSecondary = 'https://${apiServiceNameSecondary}.${bflEndpointDomain}/providers/blackforestlabs/v1'
+var maiServiceUrl = 'https://${apiServiceNameSecondary}.services.ai.azure.com/mai/v1'
 
 module logAnalyticsWorkspace 'modules/log-analytics-workspace.bicep' = {
   name: 'log-analytics-workspace'
@@ -542,6 +555,12 @@ module api 'modules/api.bicep' = {
     bflApiDisplayName: bflApiDisplayName
     bflApiXml: bflApiXml
     bflOpenApiSpec: loadTextContent('api_definitions/BlackForestLabs_OpenAPI.json')
+    maiServiceUrl: maiServiceUrl
+    maiApiName: maiApiName
+    maiApiPath: maiApiPath
+    maiApiDisplayName: maiApiDisplayName
+    maiApiXml: maiApiXml
+    maiOpenApiSpec: loadTextContent('api_definitions/MAI_Image_OpenAPI.json')
     aiLoggerId: apiManagement.outputs.aiLoggerId
     apimProductName: apimProductName
     apimProductDisplayName: apimProductDisplayName

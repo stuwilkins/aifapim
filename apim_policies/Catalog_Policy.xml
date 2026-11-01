@@ -8,19 +8,35 @@
     <!-- Run the product-level policy: without <base /> a product's own rule (the
          NAT-pool lock on the internal service product) would not apply here. -->
     <base />
-    <!-- Static return-response: no backend call is made. The catalog body is
-         baked in at deploy time: aifapim.bicep replaces the sentinel in the
-         set-body element below with the XML-escaped contents of
-         model-catalog.json. The sentinel must appear only in set-body: it
-         is replaced everywhere, and the catalog text is not valid inside an
-         XML comment. -->
-    <return-response>
-      <set-status code="200" reason="OK" />
-      <set-header name="Content-Type" exists-action="override">
-        <value>application/json</value>
-      </set-header>
-      <set-body>__CATALOG_JSON__</set-body>
-    </return-response>
+    <!-- Static return-response: no backend call is made. Two bodies are baked
+         in at deploy time by aifapim.bicep, each replacing the sentinel in its
+         own set-body element with the XML-escaped JSON: the chat model catalog
+         (model-catalog.json) for GET /catalog, and the image model catalog
+         (image-catalog.json) for GET /catalog/images. The sentinels must appear
+         only in set-body: they are replaced everywhere, and the catalog text is
+         not valid inside an XML comment. The two catalogs are separate on
+         purpose: clients that build a chat model list from /catalog must never
+         see an image model. -->
+    <choose>
+      <when condition="@(context.Operation.Id == &quot;getImageCatalog&quot;)">
+        <return-response>
+          <set-status code="200" reason="OK" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/json</value>
+          </set-header>
+          <set-body>__IMAGE_CATALOG_JSON__</set-body>
+        </return-response>
+      </when>
+      <otherwise>
+        <return-response>
+          <set-status code="200" reason="OK" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/json</value>
+          </set-header>
+          <set-body>__CATALOG_JSON__</set-body>
+        </return-response>
+      </otherwise>
+    </choose>
   </inbound>
   <backend>
     <base />
