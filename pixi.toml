@@ -7,7 +7,7 @@ version = "0.1.0"
 
 [feature.dev.dependencies]
 pre-commit = "*"
-nodejs     = "*"
+nodejs     = ">=26.12.1,<27"
 # Versions must match rev: pins in .pre-commit-config.yaml
 codespell  = "==2.4.2"
 
