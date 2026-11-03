@@ -114,7 +114,7 @@ param apimProductDisplayName string = 'AIFAPIM'
 @description('Description for the APIM product.')
 param apimProductDescription string = 'AI Foundry APIM product. Groups the Azure OpenAI, Azure OpenAI v1 Messages, and Anthropic APIs.'
 
-@description('Extra APIM products for service (machine) keys. Each entry is { name, displayName, description, allowedClientIps? }. Each holds the three inference APIs and the catalog API, like the user product. allowedClientIps (IPv4 addresses, or CIDR ranges taken from the network to the broadcast address) restricts the product to those callers, in addition to the global allowedClientIps.')
+@description('Extra APIM products for service (machine) keys. Each entry is { name, displayName, description, allowedClientIps?, entraAuth? }. Each holds the three inference APIs and the catalog API, like the user product. allowedClientIps (IPv4 addresses, or CIDR ranges taken from the network to the broadcast address) restricts the product to those callers, in addition to the global allowedClientIps. entraAuth ({ tenantId, audience, role }) makes the product need a Microsoft Entra ID app-only access token as well as the key: signed by the tenant, issued for the audience (the client ID of the gateway API app), holding the app role, and obtained with a certificate. Keep the real values out of this repository (they belong in the environment parameter file).')
 param serviceProducts array = []
 
 @description('Curated model catalog JSON array (id/name/provider/context/output per chat-LLM model). Populated in the bicepparam file via loadTextContent(\'./model-catalog.json\'). Baked into the GET /catalog return-response policy at deploy time.')
@@ -253,12 +253,24 @@ var catalogProductDescription = 'Read-only product scoped to GET /catalog only, 
 // when it has allowedClientIps. A CIDR entry covers the whole range, network to
 // broadcast (unlike the global allow-list, which uses the usable addresses), so
 // that every address of the NSLS-II NAT pool, all 16 in use, is accepted.
+//
+// A product with entraAuth also needs an Entra ID access token (see
+// apim_policies/Product_EntraAuth_Policy.xml). Its policy has the same ip-filter
+// block when the product has allowedClientIps. The values go into XML, so they
+// are escaped.
+func xmlEscape(value string) string => replace(replace(replace(replace(replace(value, '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '"', '&quot;'), '\'', '&apos;')
+
+func productIpFilterXml(ips array) string => empty(ips) ? '' : '<ip-filter action="allow">\n            ${join(map(ips, ip => contains(ip, '/') ? '<address-range from="${parseCidr(ip).network}" to="${parseCidr(ip).broadcast}" />' : '<address>${ip}</address>'), '\n            ')}\n        </ip-filter>'
+
 var productIpPolicyTemplate = loadTextContent('apim_policies/Product_IpRestricted_Policy.xml')
+var productEntraAuthPolicyTemplate = loadTextContent('apim_policies/Product_EntraAuth_Policy.xml')
 var serviceProductsResolved = map(serviceProducts, p => {
   name: p.name
   displayName: p.displayName
   description: p.description
-  policyXml: empty(p.?allowedClientIps ?? []) ? '' : replace(productIpPolicyTemplate, '__PRODUCT_ALLOWED_IPS__', join(map(p.allowedClientIps, ip => contains(ip, '/') ? '<address-range from="${parseCidr(ip).network}" to="${parseCidr(ip).broadcast}" />' : '<address>${ip}</address>'), '\n            '))
+  policyXml: !empty(p.?entraAuth ?? {})
+    ? replace(replace(replace(replace(productEntraAuthPolicyTemplate, '__PRODUCT_IP_FILTER__', productIpFilterXml(p.?allowedClientIps ?? [])), '__ENTRA_TENANT_ID__', xmlEscape(p.entraAuth.tenantId)), '__ENTRA_AUDIENCE__', xmlEscape(p.entraAuth.audience)), '__ENTRA_ROLE__', xmlEscape(p.entraAuth.role))
+    : empty(p.?allowedClientIps ?? []) ? '' : replace(productIpPolicyTemplate, '__PRODUCT_ALLOWED_IPS__', join(map(p.allowedClientIps, ip => contains(ip, '/') ? '<address-range from="${parseCidr(ip).network}" to="${parseCidr(ip).broadcast}" />' : '<address>${ip}</address>'), '\n            '))
 })
 
 var unique = uniqueString(resourceGroup().id, subscription().id)

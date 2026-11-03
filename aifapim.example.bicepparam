@@ -112,6 +112,13 @@ param catalogJson = loadTextContent('./model-catalog.example.json')
 // and the catalog API. allowedClientIps restricts a product to those callers
 // (a CIDR covers its whole range, network to broadcast), on top of the global
 // allowedClientIps. Leave the list empty to have none.
+// entraAuth makes a product need a Microsoft Entra ID app-only access token as
+// well as the subscription key: tenantId is your tenant, audience is the client ID
+// of the Entra app that represents this gateway, and role is an app role of that app
+// that can be assigned to applications. The token must be signed by the tenant,
+// issued for the audience, hold the role and have been obtained with a certificate.
+// Do not commit real IDs to a public repository: keep them in the environment's own
+// parameter file.
 param serviceProducts = [
   {
     name: 'services-external'
@@ -125,6 +132,19 @@ param serviceProducts = [
     allowedClientIps: [
       '192.0.2.0/28'  // example (TEST-NET-1)
     ]
+  }
+  {
+    name: 'services-token'
+    displayName: 'Services (key and Entra token)'
+    description: 'Keys for services on site that also present a Microsoft Entra ID access token.'
+    allowedClientIps: [
+      '192.0.2.0/28'  // example (TEST-NET-1)
+    ]
+    entraAuth: {
+      tenantId: '00000000-0000-0000-0000-000000000000'    // example, replace
+      audience: '00000000-0000-0000-0000-000000000000'    // example, replace: client ID of the gateway API app
+      role: 'Inference.Invoke'                            // example, replace: an app role of that app
+    }
   }
 ]
 

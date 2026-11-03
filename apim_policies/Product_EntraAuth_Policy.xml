@@ -1,0 +1,46 @@
+<policies>
+    <inbound>
+        <base />
+        <!-- Product policy for a service product that needs an Entra ID access token
+             as well as the subscription key (the key is still required and checked
+             by the API; this adds the token). aifapim.bicep builds it from the
+             entraAuth setting of the product: it fills in the ip-filter block
+             (only when the product has allowedClientIps), the tenant, the audience
+             and the app role. It runs where an API policy calls <base />, which
+             every API policy here does.
+             The token is read from the Authorization header. It must be signed by
+             the tenant, not expired, issued for the audience (for a v2 token the
+             client ID of the API app) and carry the required app role. idtyp app
+             means an app-only token (not a person). azpacr 2 means the client proved
+             itself with a certificate; 1 is a client secret and 0 a public client,
+             both refused. No list of client apps is kept here: which apps hold the
+             role is decided in Entra ID, so adding a client is not a gateway
+             deployment. A token is not tied to the key it is sent with. -->
+        __PRODUCT_IP_FILTER__
+        <validate-azure-ad-token tenant-id="__ENTRA_TENANT_ID__" failed-validation-httpcode="401" failed-validation-error-message="A valid Microsoft Entra ID access token (Authorization: Bearer) for this gateway is required in addition to the subscription key.">
+            <audiences>
+                <audience>__ENTRA_AUDIENCE__</audience>
+            </audiences>
+            <required-claims>
+                <claim name="roles">
+                    <value>__ENTRA_ROLE__</value>
+                </claim>
+                <claim name="idtyp">
+                    <value>app</value>
+                </claim>
+                <claim name="azpacr">
+                    <value>2</value>
+                </claim>
+            </required-claims>
+        </validate-azure-ad-token>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

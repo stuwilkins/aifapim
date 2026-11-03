@@ -224,8 +224,22 @@ Fetch the keys with
   | `aifapim-catalog` | NSLS-II AIF APIM Services (catalog poller) | `catalog-api` | `svc-catalog-poller` | none |
 
   The service products come from the `serviceProducts` parameter (each
-  `{ name, displayName, description, allowedClientIps? }`), written one at a
-  time after the user product's links. Things to know:
+  `{ name, displayName, description, allowedClientIps?, entraAuth? }`), written
+  one at a time after the user product's links. Things to know:
+  - **`entraAuth` adds a Microsoft Entra ID token check to a product.** A
+    product with `entraAuth: { tenantId, audience, role }` gets its policy from
+    `apim_policies/Product_EntraAuth_Policy.xml` (with the same `ip-filter` when
+    it has `allowedClientIps`) instead of the IP-only template. The policy runs
+    `<validate-azure-ad-token>` on the `Authorization` header: tenant, audience
+    (the client ID of the gateway's Entra app, as a v2 token carries it), the
+    app role, `idtyp` = `app` and `azpacr` = `2` (certificate; a client secret
+    or a person's token is refused). The subscription key is still required, so
+    token limit, metrics and request log keep naming the caller by its
+    subscription, and a token is not tied to a particular key. The gateway keeps
+    no client list: who may get a token is decided by the role assignments in
+    Entra ID. **This repository is public**: the tenant, audience and role go in
+    the environment's own parameter file, never here (the example file has
+    placeholders). Products without `entraAuth` render exactly as before.
   - **The internal lock sees the caller the gateway sees.** Clients that reach
     `hermes.nsls2.bnl.gov` pass through a Signal Sciences WAF and arrive from
     its AWS addresses. The WAF sends no client address in any header (checked

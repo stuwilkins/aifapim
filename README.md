@@ -371,9 +371,12 @@ Pay particular attention to:
 - `apimProductName` — the APIM product the five inference APIs (and the
   catalog API) are grouped under, and the App Insights custom-metric namespace.
 - `serviceProducts` — optional extra products for service keys, each
-  `{ name, displayName, description, allowedClientIps? }` with the same four
-  APIs. `allowedClientIps` locks a product to those callers (a CIDR covers its
-  whole range) on top of the global list. See `AGENTS.md` "Products".
+  `{ name, displayName, description, allowedClientIps?, entraAuth? }` with the
+  same four APIs. `allowedClientIps` locks a product to those callers (a CIDR
+  covers its whole range) on top of the global list. `entraAuth`
+  (`{ tenantId, audience, role }`) makes the product need a Microsoft Entra ID
+  app-only token as well as the key (see "Authentication model"). See
+  `AGENTS.md` "Products".
 
 ## Repository Structure
 
@@ -480,17 +483,37 @@ Authentication is two-hop and intentionally asymmetric:
   passed via the `x-api-key` header, gated by the `allowedClientIps` IP allow-
   list described above.
 
-Entra ID token validation (`<validate-azure-ad-token>`) is **intentionally not
-configured** on any of the three APIM policies. Adding it on top of the
-subscription-key flow would require every caller (interactive users, batch
-jobs, OpenCode, the `examples/test-apim.py` smoke test) to also acquire an
-AAD token for an APIM-fronting app registration — none of those flows are
-wired up today. If dual-factor auth is ever required, plan to (1) register
-and grant scopes for an APIM-fronting Entra app, (2) decide how non-
-interactive callers obtain tokens (workload identity / device-code / client
-credentials), (3) update the example clients to acquire and forward those
-tokens, and (4) only then add
-`<validate-azure-ad-token>` blocks to the policy XMLs.
+**Key and Entra token (optional, per product).** The inference API policies
+do not check an Entra ID token, so a plain key works as before. A service
+product can ask for one on top of the key: give its entry in `serviceProducts`
+an `entraAuth` setting (`{ tenantId, audience, role }`). The gateway then builds
+that product's policy from `apim_policies/Product_EntraAuth_Policy.xml`, which
+runs `<validate-azure-ad-token>` and requires:
+
+- **both credentials.** The key still comes first: a call with no valid key is
+  refused by the API, and a call with a key but no valid token gets HTTP 401.
+  The token is sent as `Authorization: Bearer <token>`, the key as `x-api-key`.
+- **a token for this gateway**: signed by the tenant, not expired, issued for
+  `audience` (for a v2 token, the client ID of the Entra app that represents
+  the gateway) and holding the app role `role`.
+- **an app-only token obtained with a certificate** (`idtyp` is `app`, `azpacr`
+  is `2`), so a person's token or one got with a client secret is refused.
+
+No list of client apps is kept in the gateway: which apps hold the role is set
+in Entra ID, so adding a caller is not a gateway deployment. The token is not
+tied to the key it is sent with. The key still identifies the caller for the
+token limit, the metrics and the request log. On the way to the models APIM
+replaces the `Authorization` header with its managed-identity token, so the
+caller's token never reaches them.
+
+A client library that sends its API key as `Authorization: Bearer` (the OpenAI
+SDK does) must replace that header with the Entra token. The tenant, audience
+and role are not secrets, but keep the real values out of this public
+repository: set them in the environment's own parameter file, and use the
+placeholders in `aifapim.example.bicepparam`.
+
+Without `entraAuth` nothing changes. Entra ID token validation is not applied
+to the user product or to the other service products.
 
 ## Token Usage Analytics
 
