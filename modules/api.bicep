@@ -116,13 +116,22 @@ param serviceProducts array = []
 
 // Request headers copied into Application Insights (AppRequests, as
 // Request-<name>). The WAF in front of hermes.nsls2.bnl.gov (Signal Sciences)
-// adds the two X-Sigsci headers: the request id finds the request in the WAF
-// console, which records the client address the WAF saw. The WAF sends no
-// X-Forwarded-For, so that one is empty unless a client sets it.
+// adds the X-Sigsci headers: the request id finds the request in the WAF
+// console, which records the client address the WAF saw, and the tags list the
+// signals it raised. Since 2026-11-04 it also adds X-Forwarded-For, appended
+// to any value the client sent, so only the last entry can be trusted.
+// Fastly-Client-IP is logged to see whether the WAF sets it; where it exists a
+// client can send its own value, so the same caution applies. Never add
+// Fastly-Key: it is an API token.
 var loggedRequestHeaders = [
   'X-Forwarded-For'
   'X-Sigsci-Requestid'
   'X-Sigsci-Agentresponse'
+  'X-Sigsci-Tags'
+  'Fastly-Client-IP'
+  'Fastly-Client'
+  'Fastly-FF'
+  'Fastly-SSL'
 ]
 
 resource parentAPIM 'Microsoft.ApiManagement/service@2023-03-01-preview' existing = {

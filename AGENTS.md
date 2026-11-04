@@ -242,17 +242,42 @@ Fetch the keys with
     placeholders). Products without `entraAuth` render exactly as before.
   - **The internal lock sees the caller the gateway sees.** Clients that reach
     `hermes.nsls2.bnl.gov` pass through a Signal Sciences WAF and arrive from
-    its AWS addresses. The WAF sends no client address in any header (checked
-    on dev, 2026-10-31: it adds only `X-Amzn-Trace-Id`, `X-Sigsci-Requestid`
-    and `X-Sigsci-Agentresponse`), so an internal key only works when the
-    caller is on N2SN or NSLS2ACC and calls `aifapim.nsls2.bnl.gov` directly,
-    from the NAT pool. Through Hermes it gets a 403. The gateway never trusts
-    `X-Forwarded-For` for the lock or the logged address. The two `X-Sigsci-*`
-    headers are logged to Application Insights (`AppRequests`, as
-    `Request-X-Sigsci-Requestid` and `Request-X-Sigsci-Agentresponse`), so a
-    request can be found in the WAF console, which records the client address
-    the WAF saw. Behind the BNL NAT that is the NAT pool address, so it does not
-    identify a host.
+    its AWS addresses, so an internal key only works when the caller is on
+    N2SN or NSLS2ACC and calls `aifapim.nsls2.bnl.gov` directly, from the NAT
+    pool. Through Hermes it gets a 403. The gateway never trusts
+    `X-Forwarded-For` for the lock.
+    - **What the WAF sends.** On 2026-10-31 (dev) it added only
+      `X-Amzn-Trace-Id`, `X-Sigsci-Requestid` and `X-Sigsci-Agentresponse`.
+      Since 2026-11-04 17:28 UTC (prod) it also adds `X-Forwarded-For`.
+    - **`X-Forwarded-For` is appended to, not replaced.** A test on
+      2026-11-04 sent `X-Forwarded-For: 192.0.2.99` through Hermes and the
+      gateway received `192.0.2.99,130.199.137.2`. Only the last entry is the
+      address the WAF saw; everything before it is client-controlled. Read the
+      last entry, never the first. Behind the BNL NAT that address is the NAT
+      pool, so it does not identify a host. If the lock were ever based on it,
+      it would have to take the last entry and apply only to requests whose
+      connecting address is one of the WAF's addresses.
+    - **Probable cause, not confirmed:** the Cloud WAF route setting "Trust
+      proxy headers" keeps a client's `X-Forwarded-For` when on and drops it
+      when off (Fastly Next-Gen WAF docs). The WAF's own client address is
+      read from the left-most entry by default, so a client could also fake
+      its address to the WAF. This is for the WAF team to check.
+    - **Logged request headers** (Application Insights `AppRequests`, as
+      `Request-<name>`): `X-Forwarded-For`, `X-Sigsci-Requestid`,
+      `X-Sigsci-Agentresponse`, `X-Sigsci-Tags`, `Fastly-Client-IP`,
+      `Fastly-Client`, `Fastly-FF` and `Fastly-SSL`. The request id finds the
+      request in the WAF console. Fastly documents the `Fastly-*` headers for
+      its CDN, not for Cloud WAF, so they may never appear; they are logged
+      to find out. A client can send its own `Fastly-Client-IP`, which Fastly
+      keeps unless the service overwrites it. Do not add `Fastly-Key` (an API
+      token) or any header that can carry a credential.
+    - **Outage, 2026-11-04.** From 14:08:48 to 17:08:55 UTC the WAF answered
+      every request itself with an empty `404` (`content-length: 0`, no
+      `request-context` header) and forwarded nothing. The gateway logged no
+      requests from the WAF's addresses and its policies were unchanged. Tell
+      a WAF answer from a gateway answer by the `request-context` header
+      (only the gateway adds it) and by `ApiManagementGatewayLogs` showing no
+      request from the WAF's addresses.
   - **A product's `<ip-filter>` is in addition to the global allow-list** on
     each API: both must pass. A CIDR in `allowedClientIps` covers its whole
     range, network to broadcast (the global list uses usable addresses), so all
