@@ -339,6 +339,53 @@ Fetch the keys with
   not exist" instead of a retry. Azure metrics showed no 429s or 5xx from
   `eastus2` in that window. If Claude is later deployed in `eastus`, add it
   to `modelDeployments[0]` and it will fail over automatically.
+- **Model router** (`model-router`, Microsoft's trained router, format
+  `OpenAI`) is a deployment like any other and is served by the OpenAI
+  routes (`/deployments/model-router/chat/completions`,
+  `/openai/v1/responses`); clients name it as the `model`. It picks one of
+  the models in the entry's `routing.models` per request (mode `balanced`,
+  `cost` or `quality`) and names it in the answer's `model` field, so a
+  catalog entry's context window is the smallest of those models. Things to
+  know:
+  - `modules/aif-deployments.bicep` passes `routing` through and applies
+    `raiPolicyName` to it (the content filter is otherwise `gpt-` only).
+  - Use `DataZoneStandard`. Its quota is `OpenAI.DataZoneStandard.ModelRouter`
+    (4000 per region for the subscription on 2026-11-10, prod and dev share
+    it). Version `2025-11-18` is updated in place by Microsoft and retires
+    2027-05-20. The router needs no separate deployment of the models it picks,
+    except Claude, which it cannot route for us: it speaks the OpenAI format
+    only, so Claude is routed by `claude-auto` below instead.
+  - The gateway's `Model` dimension says `model-router`, not the model that
+    answered (that is in the response body). The cost mapping needs a router
+    entry once its meters show in Cost Management; do not guess them.
+  - Not verified until the first dev run: that `/openai/v1/responses` works
+    with the router, and that Bicep accepts `routing` in API version
+    `2025-10-01-preview`. `pixi run test-dev` in `aifapim-config` checks the
+    first.
+- **`claude-auto`** is a model name of the Anthropic API, not a deployment.
+  With the `claudeAuto` parameter set (`classifierModel`, `simpleModel`,
+  `mediumModel`, `complexModel`, all deployments in the primary region) the
+  Anthropic policy loads `apim_policies/ClaudeAuto_Fragment.xml` at the
+  `<!-- __CLAUDE_AUTO__ -->` marker. When the request's `model` is
+  `claude-auto` it:
+  1. takes the last user message that has text (tool results are skipped, so
+     the turns of one agent run are rated alike), cut to 2000 characters;
+  2. sends it to the classifier model on the primary account with
+     `send-request` (5 s timeout, direct to Foundry, so it does not pass
+     through the gateway again and is not counted by the caller's token
+     limit) and reads `simple`, `medium` or `complex`;
+  3. rewrites `model` in the body, and sets `requestModel`, so the failover
+     check, token metrics and the `Model` dimension see the real model.
+  A classifier error, timeout or odd answer gives `complexModel` (the safe
+  choice); `count_tokens` is not rated and uses `complexModel`. The response
+  has `x-aifapim-routed-model` and `x-aifapim-route-tier`. The classifier's
+  tokens are the `Claude Auto Classifier Tokens` metric (`Model` = the
+  classifier). The request body log keeps the body the client sent. It is a
+  cost aid, not an access control: a request can word itself to be rated
+  simple, and anyone can name a model directly. Switching models between
+  turns loses the prompt cache. Not verified until the first dev run: that
+  the expressions compile on the gateway (there is no local APIM), that
+  Claude Code accepts the model name, and the classifier's latency.
 - **Image models** (Black Forest Labs FLUX, format `'Black Forest Labs'`)
   are deployed as `DataZoneStandard` so processing stays in the US data zone.
   `FLUX.2-pro` and `FLUX.1-Kontext-pro` create and edit images; `FLUX-1.1-pro`

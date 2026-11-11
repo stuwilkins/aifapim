@@ -117,6 +117,9 @@ param apimProductDescription string = 'AI Foundry APIM product. Groups the Azure
 @description('Extra APIM products for service (machine) keys. Each entry is { name, displayName, description, allowedClientIps?, entraAuth? }. Each holds the three inference APIs and the catalog API, like the user product. allowedClientIps (IPv4 addresses, or CIDR ranges taken from the network to the broadcast address) restricts the product to those callers, in addition to the global allowedClientIps. entraAuth ({ tenantId, audience, role }) makes the product need a Microsoft Entra ID app-only access token as well as the key: signed by the tenant, issued for the audience (the client ID of the gateway API app), holding the app role, and obtained with a certificate. Keep the real values out of this repository (they belong in the environment parameter file).')
 param serviceProducts array = []
 
+@description('The claude-auto model of the Anthropic API: the gateway rates the request with a small classifier model and rewrites the model to one of three real models. Leave empty to turn it off. Keys, all required when set: classifierModel, simpleModel, mediumModel and complexModel, each the name of a deployment in the primary region. The complex model is also the answer when the classifier fails.')
+param claudeAuto object = {}
+
 @description('Curated model catalog JSON array (id/name/provider/context/output per chat-LLM model). Populated in the bicepparam file via loadTextContent(\'./model-catalog.json\'). Baked into the GET /catalog return-response policy at deploy time.')
 param catalogJson string
 
@@ -190,7 +193,13 @@ var requestLogPolicyXml = requestBodyLogging ? replace(replace(loadTextContent('
 var openApiXml = replace(replace(replace(replace(replace(loadTextContent('apim_policies/AOAI_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), '__SECONDARY_MODELS__', secondaryModelList), requestLogMarker, requestLogPolicyXml)
 
 // Anthropic API policy (multi-region retry variant).
-var anthropicApiXml = replace(replace(replace(replace(replace(loadTextContent('apim_policies/Anthropic_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), '__SECONDARY_MODELS__', secondaryModelList), requestLogMarker, requestLogPolicyXml)
+// The claude-auto block (apim_policies/ClaudeAuto_Fragment.xml) replaces the
+// marker comment in <inbound> when the claudeAuto parameter is set, and nothing
+// otherwise. Applied after the other substitutions, so its own placeholders
+// are filled in here and the metric namespace is filled in afterwards.
+var claudeAutoMarker = '<!-- __CLAUDE_AUTO__ -->'
+var claudeAutoXml = empty(claudeAuto) ? '' : replace(replace(replace(replace(replace(loadTextContent('apim_policies/ClaudeAuto_Fragment.xml'), '__CLAUDE_AUTO_URL__', '${anthropicServiceUrlPrimary}/v1/messages'), '__CLAUDE_AUTO_CLASSIFIER__', claudeAuto.classifierModel), '__CLAUDE_AUTO_SIMPLE__', claudeAuto.simpleModel), '__CLAUDE_AUTO_MEDIUM__', claudeAuto.mediumModel), '__CLAUDE_AUTO_COMPLEX__', claudeAuto.complexModel)
+var anthropicApiXml = replace(replace(replace(replace(replace(replace(loadTextContent('apim_policies/Anthropic_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), claudeAutoMarker, claudeAutoXml), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), '__SECONDARY_MODELS__', secondaryModelList), requestLogMarker, requestLogPolicyXml)
 
 // OpenAI v1 Messages API policy (multi-region retry variant).
 var openaiV1MessagesApiXml = replace(replace(replace(replace(replace(loadTextContent('apim_policies/OpenAIv1Messages_Policy-Managed_Identity_with_Retry_MultiRegion.xml'), '__BACKEND_TIMEOUT__', string(backendTimeoutSeconds)), '__ALLOWED_CLIENT_IPS__', allowedIpsXml), '__METRIC_NAMESPACE__', apimProductName), '__SECONDARY_MODELS__', secondaryModelList), requestLogMarker, requestLogPolicyXml)

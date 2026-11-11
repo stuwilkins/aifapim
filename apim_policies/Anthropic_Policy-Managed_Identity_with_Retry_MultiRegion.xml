@@ -31,6 +31,7 @@
             }
         }" />
         <!-- __REQUEST_LOG__ -->
+        <!-- __CLAUDE_AUTO__ -->
         <!-- Fail over to the secondary region only for models deployed there.
              aifapim.bicep fills in the model list below at deploy time, as
              '|name|name|...' from modelDeployments[0]. The placeholder is
@@ -81,6 +82,18 @@
     </backend>
     <outbound>
         <base />
+        <!-- Set only when the request asked for claude-auto (see the claudeAuto
+             parameter): the model and the tier that were chosen. -->
+        <choose>
+            <when condition="@(context.Variables.ContainsKey(&quot;claudeAutoTier&quot;))">
+                <set-header name="x-aifapim-routed-model" exists-action="override">
+                    <value>@((string)context.Variables.GetValueOrDefault(&quot;requestModel&quot;, &quot;&quot;))</value>
+                </set-header>
+                <set-header name="x-aifapim-route-tier" exists-action="override">
+                    <value>@((string)context.Variables.GetValueOrDefault(&quot;claudeAutoTier&quot;, &quot;&quot;))</value>
+                </set-header>
+            </when>
+        </choose>
         <!-- For NON-streaming Anthropic responses, extract usage.output_tokens from
              the response body and emit it as the "Anthropic Completion Tokens"
              custom metric. APIM's classic-tier LLM diagnostic does not extract

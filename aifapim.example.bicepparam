@@ -107,6 +107,19 @@ param allowedClientIps = [
 // output windows must come from the vendor model cards.
 param catalogJson = loadTextContent('./model-catalog.example.json')
 
+// ---- claude-auto (optional) ----
+// A model name of the Anthropic API. The gateway has the classifier model rate the
+// request (simple, medium or complex) and rewrites the model to the matching one;
+// the complex model is also used when the classifier fails or is slow. All four
+// must be deployments in the primary region (regions[1]) below. Leave it empty to
+// turn it off. Add the entries below to modelDeployments before you set it.
+// param claudeAuto = {
+//   classifierModel: 'claude-haiku-4-5'
+//   simpleModel: 'claude-haiku-5-5'
+//   mediumModel: 'claude-sonnet-5-5'
+//   complexModel: 'claude-opus-5-5'
+// }
+
 // ---- Service products (optional) ----
 // Extra products for service (machine) keys, each with the three inference APIs
 // and the catalog API. allowedClientIps restricts a product to those callers
@@ -209,6 +222,25 @@ param modelDeployments = [
       version: '2025-04-14'
       skuName: 'DataZoneStandard'
     }
+    // Model router: picks one of the listed models for each request (GPT models only
+    // here; Claude is routed by claude-auto). DataZoneStandard keeps processing in the
+    // US data zone. `routing` is optional: leave it out for Microsoft's full list.
+    // The context window of the router is that of its smallest model.
+    {
+      name:    'model-router'
+      model:   'model-router'
+      version: '2025-11-18'
+      skuName: 'DataZoneStandard'
+      capacity: 100
+      versionUpgradeOption: 'NoAutoUpgrade'
+      routing: {
+        mode: 'balanced'
+        models: [
+          { format: 'OpenAI', name: 'gpt-4.1', version: '2025-04-14' }
+          { format: 'OpenAI', name: 'gpt-4.1-mini', version: '2025-04-14' }
+        ]
+      }
+    }
     {
       name:    'FLUX.2-pro'
       model:   'FLUX.2-pro'
@@ -234,6 +266,25 @@ param modelDeployments = [
       model:   'gpt-4.1-mini'
       version: '2025-04-14'
       skuName: 'DataZoneStandard'
+    }
+    // Model router: picks one of the listed models for each request (GPT models only
+    // here; Claude is routed by claude-auto). DataZoneStandard keeps processing in the
+    // US data zone. `routing` is optional: leave it out for Microsoft's full list.
+    // The context window of the router is that of its smallest model.
+    {
+      name:    'model-router'
+      model:   'model-router'
+      version: '2025-11-18'
+      skuName: 'DataZoneStandard'
+      capacity: 100
+      versionUpgradeOption: 'NoAutoUpgrade'
+      routing: {
+        mode: 'balanced'
+        models: [
+          { format: 'OpenAI', name: 'gpt-4.1', version: '2025-04-14' }
+          { format: 'OpenAI', name: 'gpt-4.1-mini', version: '2025-04-14' }
+        ]
+      }
     }
     {
       name:    'FLUX.2-pro'

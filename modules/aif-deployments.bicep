@@ -50,8 +50,13 @@ resource deployments 'Microsoft.CognitiveServices/accounts/deployments@2025-10-0
         organizationName: anthropicOrganizationName
       }
     } : {},
-    (startsWith(deployment.model, 'gpt-') && contains(deployment, 'raiPolicyName')) ? {
+    ((startsWith(deployment.model, 'gpt-') || deployment.model == 'model-router') && contains(deployment, 'raiPolicyName')) ? {
       raiPolicyName: deployment.raiPolicyName
+    } : {},
+    // Model router only: { mode, models: [{ format, name, version }] }. The
+    // models are the ones it may pick; leave it out for the default set.
+    deployment.model == 'model-router' && contains(deployment, 'routing') ? {
+      routing: deployment.routing
     } : {}
   )
 }]
