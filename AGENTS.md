@@ -386,8 +386,13 @@ Fetch the keys with
     `raiPolicyName` to it (the content filter is otherwise `gpt-` only).
     Azure accepted `routing` in API version `2025-10-01-preview` on dev.
   - Use `DataZoneStandard`. Its quota is `OpenAI.DataZoneStandard.ModelRouter`
-    (4000 per region for the subscription on 2026-11-10, prod and dev share
-    it). Version `2025-11-18` is updated in place by Microsoft and retires
+    (4000 in all: **one pool for the whole subscription, counted across both
+    regions and both environments**, not per region. `az cognitiveservices
+    usage list` shows the same total in each region. A first prod deploy asked
+    for 2000 in each region and failed with `InsufficientQuota` because dev
+    already held 1000. Check the free total before sizing a router; the split
+    is in the capacity comments of the parameter files). Version `2025-11-18`
+    is updated in place by Microsoft and retires
     2027-05-20. The router needs no separate deployment of the models it picks,
     except Claude, which it cannot route for us: it speaks the OpenAI format
     only, so Claude is routed by `claude-auto` below instead.
