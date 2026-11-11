@@ -282,6 +282,13 @@ Fetch the keys with
     each API: both must pass. A CIDR in `allowedClientIps` covers its whole
     range, network to broadcast (the global list uses usable addresses), so all
     16 NAT pool addresses are accepted.
+  - **Every service product has a policy resource.** A product with no
+    `allowedClientIps` and no `entraAuth` gets an inheritance-only policy
+    (`<base />` in each section). An incremental deployment never deletes a
+    policy, so when the resource was skipped for an empty restriction, removing
+    `allowedClientIps` from the parameters left the old allow-list on the
+    product. Keys on such a product are now unrestricted again as soon as the
+    parameter is removed and deployed.
   - **The product policy only runs where an API policy calls `<base />`.** All
     four API policies do. The catalog policy used not to, and would have
     skipped the lock.

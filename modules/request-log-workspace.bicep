@@ -52,7 +52,9 @@ resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
     sku: {
       name: 'PerGB2018'
     }
-    retentionInDays: interactiveRetentionDays
+    // A PerGB2018 workspace keeps data for at least 30 days; the table below
+    // keeps its own, shorter interactive retention.
+    retentionInDays: max(30, interactiveRetentionDays)
     features: {
       disableLocalAuth: true
       enableLogAccessUsingOnlyResourcePermissions: true

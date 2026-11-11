@@ -164,6 +164,9 @@ resource auditSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview
   name: 'audit-to-law'
   properties: {
     workspaceId: auditWorkspaceId
+    // Resource-specific tables (StorageBlobLogs), not AzureDiagnostics: the
+    // checks in AGENTS.md query StorageBlobLogs.
+    logAnalyticsDestinationType: 'Dedicated'
     logs: [
       {
         category: 'StorageRead'

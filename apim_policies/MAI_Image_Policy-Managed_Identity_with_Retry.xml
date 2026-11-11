@@ -19,7 +19,7 @@
                 var model = &quot;&quot;;
                 if (contentType.StartsWith(&quot;multipart/form-data&quot;, StringComparison.OrdinalIgnoreCase)) {
                     var text = context.Request.Body.As&lt;string&gt;(preserveContent: true);
-                    var m = System.Text.RegularExpressions.Regex.Match(text, &quot;name=\&quot;model\&quot;\\r?\\n\\r?\\n([^\\r\\n]+)&quot;);
+                    var m = System.Text.RegularExpressions.Regex.Match(text, &quot;name=\&quot;model\&quot;[^\\r\\n]*\\r?\\n(?:[^\\r\\n]+\\r?\\n)*\\r?\\n([^\\r\\n]+)&quot;);
                     model = m.Success ? m.Groups[1].Value.Trim() : &quot;&quot;;
                 } else {
                     var body = context.Request.Body.As&lt;JObject&gt;(preserveContent: true);
@@ -31,14 +31,22 @@
             }
         }" />
         <!-- web_grounding sends the prompt to Bing, a service outside Foundry,
-             so it is refused. JSON bodies are parsed; for multipart the form
-             field is looked for. -->
+             so it is refused. JSON bodies are parsed. For multipart the field
+             is read after any part headers (a Content-Type line is allowed), and
+             a form that names the field but whose value cannot be read as false
+             or 0 is refused too, so a request that cannot be checked is not
+             passed on. -->
         <set-variable name="webGrounding" value="@{
             try {
                 var contentType = context.Request.Headers.GetValueOrDefault(&quot;Content-Type&quot;, &quot;&quot;);
                 if (contentType.StartsWith(&quot;multipart/form-data&quot;, StringComparison.OrdinalIgnoreCase)) {
                     var text = context.Request.Body.As&lt;string&gt;(preserveContent: true);
-                    return System.Text.RegularExpressions.Regex.IsMatch(text, &quot;name=\&quot;web_grounding\&quot;\\r?\\n\\r?\\n\\s*(true|1)\\s*\\r?\\n&quot;, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    var gm = System.Text.RegularExpressions.Regex.Match(text, &quot;name=\&quot;web_grounding\&quot;[^\\r\\n]*\\r?\\n(?:[^\\r\\n]+\\r?\\n)*\\r?\\n([^\\r\\n]*)&quot;, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (!gm.Success) {
+                        return text.IndexOf(&quot;web_grounding&quot;, StringComparison.OrdinalIgnoreCase) &gt;= 0;
+                    }
+                    var gv = gm.Groups[1].Value.Trim().ToLowerInvariant();
+                    return gv != &quot;false&quot; &amp;&amp; gv != &quot;0&quot;;
                 }
                 var body = context.Request.Body.As&lt;JObject&gt;(preserveContent: true);
                 var token = body[&quot;web_grounding&quot;];

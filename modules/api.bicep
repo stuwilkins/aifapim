@@ -804,13 +804,19 @@ resource serviceProductApi 'Microsoft.ApiManagement/service/products/apis@2023-0
   dependsOn: [serviceProduct]
 }]
 
+// A product always gets a policy. Without a restriction it only inherits, so a
+// restriction that is removed from the parameters is removed from the product too:
+// an incremental deployment never deletes a policy, and skipping the resource
+// would leave the old allow-list in place.
+var serviceProductInheritOnlyPolicy = '<policies><inbound><base /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>'
+
 @batchSize(1)
-resource serviceProductPolicy 'Microsoft.ApiManagement/service/products/policies@2023-03-01-preview' = [for (p, i) in serviceProducts: if (!empty(p.policyXml)) {
+resource serviceProductPolicy 'Microsoft.ApiManagement/service/products/policies@2023-03-01-preview' = [for (p, i) in serviceProducts: {
   parent: serviceProduct[i]
   name: 'policy'
   dependsOn: [serviceProductApi]
   properties: {
     format: 'xml'
-    value: p.policyXml
+    value: empty(p.policyXml) ? serviceProductInheritOnlyPolicy : p.policyXml
   }
 }]

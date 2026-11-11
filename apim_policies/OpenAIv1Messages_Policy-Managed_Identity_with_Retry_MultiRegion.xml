@@ -12,13 +12,14 @@
              on the token metric below. -->
         <set-variable name="isImageRequest" value="@(context.Request.Url.Path.Contains(&quot;/images/&quot;))" />
         <!-- Image edits arrive as multipart form data, not JSON, so the model
-             field is read from the form text when the body is not JSON. -->
+             field is read from the form text when the body is not JSON. Part
+             headers after Content-Disposition (such as Content-Type) are allowed. -->
         <set-variable name="requestModel" value="@{
             try {
                 var contentType = context.Request.Headers.GetValueOrDefault(&quot;Content-Type&quot;, &quot;&quot;);
                 if (contentType.StartsWith(&quot;multipart/form-data&quot;, StringComparison.OrdinalIgnoreCase)) {
                     var text = context.Request.Body.As&lt;string&gt;(preserveContent: true);
-                    var m = System.Text.RegularExpressions.Regex.Match(text, &quot;name=\&quot;model\&quot;\\r?\\n\\r?\\n([^\\r\\n]+)&quot;);
+                    var m = System.Text.RegularExpressions.Regex.Match(text, &quot;name=\&quot;model\&quot;[^\\r\\n]*\\r?\\n(?:[^\\r\\n]+\\r?\\n)*\\r?\\n([^\\r\\n]+)&quot;);
                     return m.Success ? m.Groups[1].Value.Trim() : &quot;&quot;;
                 }
                 var body = context.Request.Body.As&lt;JObject&gt;(preserveContent: true);
