@@ -197,8 +197,17 @@ Fetch the keys with
     `dimensions_adjustable`, `max_input_tokens`, `route`, `residency`,
     `retires` and `notes`. It is separate for the same reason as the image
     catalog: an embedding model has provider `OpenAI`, so in `/catalog` it would
-    be offered as a chat model. Operation id `getEmbeddingCatalog`. The
-    Llama models are served but are in no catalog, on purpose.
+    be offered as a chat model. Operation id `getEmbeddingCatalog`.
+    `/catalog/routers` returns the model routers, baked in from
+    `router-catalog.json` (the `routerCatalogJson` param): `id`, `name`,
+    `provider`, `context` and `output` (the smallest of the models it can
+    pick), `mode`, `models`, `routes` (the gateway route for Chat Completions
+    and `null` for Responses, which the router does not serve), `residency`,
+    `retires` and `notes`. It is separate because a router serves Chat
+    Completions only and every `OpenAI` entry of `/catalog` is offered to
+    OpenCode through the Responses API. Operation id `getRouterCatalog`; empty
+    (`[]`) where no router is deployed. The Llama models are served but are in
+    no catalog, on purpose.
     Grouped under its own **`aifapim-catalog` product** (shown as "NSLS-II AIF
     APIM Services (catalog poller)") — keys scoped to this product cannot call
     any inference endpoint — and also in the user and service products. No
@@ -209,7 +218,7 @@ Fetch the keys with
     `<API path> + <operation urlTemplate>`. The catalog API uses
     `path = 'catalog'` and `urlTemplate = '/'`, giving the effective route
     `/catalog`; the `/images` and `/embeddings` operations give
-    `/catalog/images` and `/catalog/embeddings`. Do **not**
+    `/catalog/images`, `/catalog/embeddings` and `/catalog/routers`. Do **not**
     put `/catalog` in the OpenAPI operation path — that doubles the segment to
     `/catalog/catalog` and produces a 404.
 - **Products** (the same on dev and prod). A key's product decides which
@@ -354,7 +363,8 @@ Fetch the keys with
   operation is unsupported" (the same is reported for OpenCode,
   opencode#52113). Clients that speak only Responses, which includes the
   OpenCode provider that ansible builds from `/catalog` (`@ai-sdk/openai`),
-  cannot use it, so it is not offered in `/catalog` (see `aifapim-config`).
+  cannot use it, so it is not in `/catalog`; it is listed at
+  `GET /catalog/routers` instead (see `aifapim-config`).
   It picks one of the models in the entry's `routing.models` per request (mode
   `balanced`, `cost` or `quality`) and names it in the answer's `model` field,
   so a catalog entry's context window would be the smallest of those models.
@@ -389,7 +399,10 @@ Fetch the keys with
   choice); `count_tokens` is not rated and uses `complexModel`. The response
   has `x-aifapim-routed-model` and `x-aifapim-route-tier`. The classifier's
   tokens are the `Claude Auto Classifier Tokens` metric (`Model` = the
-  classifier). The request body log keeps the body the client sent. It is a
+  classifier). It is listed in `/catalog` as an Anthropic model (windows: the
+  smallest of its three models), so OpenCode offers it through the Anthropic
+  provider; every environment that deploys that catalog must set
+  `claudeAuto`. The request body log keeps the body the client sent. It is a
   cost aid, not an access control: a request can word itself to be rated
   simple, and anyone can name a model directly. Switching models between
   turns loses the prompt cache. Not verified until the first dev run: that

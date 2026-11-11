@@ -205,6 +205,87 @@
           }
         }
       }
+    },
+    "/routers": {
+      "get": {
+        "operationId": "getRouterCatalog",
+        "summary": "List the model routers: models that pick another model for each request",
+        "description": "A router is not in GET /catalog: it serves Chat Completions only, and chat clients that are built from GET /catalog use the Responses API, so they could not call it. Each entry says which route to use.",
+        "responses": {
+          "200": {
+            "description": "Array of router entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "name",
+                      "provider",
+                      "context",
+                      "output",
+                      "mode",
+                      "models",
+                      "routes",
+                      "residency"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Model deployment name (pass as 'model' in API requests)"
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "Human-readable display name"
+                      },
+                      "provider": {
+                        "type": "string"
+                      },
+                      "context": {
+                        "type": "integer",
+                        "description": "Context window in tokens: the smallest of the models the router can pick"
+                      },
+                      "output": {
+                        "type": "integer",
+                        "description": "Output limit in tokens: the smallest of the models the router can pick"
+                      },
+                      "mode": {
+                        "type": "string",
+                        "description": "Routing mode: balanced, cost or quality"
+                      },
+                      "models": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "The models the router can pick from"
+                      },
+                      "routes": {
+                        "type": "object",
+                        "description": "Gateway route for each API: method, path and query. An API the router does not serve is listed as null"
+                      },
+                      "residency": {
+                        "type": "string",
+                        "description": "DataZone (processed in the US data zone) or Global (may be processed outside the US)"
+                      },
+                      "retires": {
+                        "type": "string",
+                        "description": "Date Microsoft retires the router version (YYYY-MM-DD)"
+                      },
+                      "notes": {
+                        "type": "string",
+                        "description": "Limits and quirks of the router"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
