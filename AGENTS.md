@@ -181,8 +181,12 @@ Fetch the keys with
     `0`, a repeated one, and any form it cannot read with certainty (no or
     repeated `boundary`, no closing delimiter, an RFC 2231 `name*`). Check a
     change to it with `pwsh -NoProfile -File tests/policy/mai-policy-test.ps1`:
-    it compiles the real expressions from the XML and runs 32 multipart and JSON
-    cases (needs PowerShell 7; it does not run APIM).
+    it compiles the real expressions from the XML and runs 46 multipart and JSON
+    cases (needs PowerShell 7; it does not run APIM). It also fails when any
+    policy file uses a `Regex` member that APIM does not allow in an expression
+    (only `IsMatch`, `Match`, `Matches`, `Replace`, `Unescape` and `Split` are):
+    `Regex.Escape` passed every compiled case and still failed the first dev
+    deployment with a `ValidationError`, because only APIM checks that list.
     Output is always one PNG; width and height are at least 768 with a total of
     at most 2,359,296 pixels. Grouped under `apimProductName` product and the
     service products.

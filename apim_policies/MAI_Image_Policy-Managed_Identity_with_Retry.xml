@@ -17,7 +17,9 @@
              closing delimiter, a part without a header block, a disposition
              header whose parameters do not parse quote by quote, a repeated
              or RFC 2231 name, an error) gets the key #ambiguous. The reader is
-             written to refuse rather than guess. -->
+             written to refuse rather than guess. The boundary is escaped with
+             Regex.Replace because APIM does not allow Regex.Escape in a policy
+             expression (see the allowed members in the APIM documentation). -->
         <set-variable name="formFields" value="@{
             try {
                 var contentType = context.Request.Headers.GetValueOrDefault(&quot;Content-Type&quot;, &quot;&quot;);
@@ -34,7 +36,7 @@
                 }
                 if (string.IsNullOrEmpty(boundary)) { fields[&quot;#ambiguous&quot;] = true; return fields; }
                 var text = context.Request.Body.As&lt;string&gt;(preserveContent: true).Replace(&quot;\r\n&quot;, &quot;\n&quot;);
-                var delim = System.Text.RegularExpressions.Regex.Escape(&quot;--&quot; + boundary);
+                var delim = System.Text.RegularExpressions.Regex.Replace(&quot;--&quot; + boundary, &quot;[\\\\.*+?^$(){}|\\[\\]#\\s]&quot;, &quot;\\$&amp;&quot;);
                 if (!System.Text.RegularExpressions.Regex.IsMatch(text, &quot;(?m)^&quot; + delim + &quot;--[ \\t]*$&quot;)) { fields[&quot;#ambiguous&quot;] = true; return fields; }
                 var chunks = System.Text.RegularExpressions.Regex.Split(text, &quot;(?m)^&quot; + delim + &quot;(?:--)?[ \\t]*$&quot;);
                 var parameter = new System.Text.RegularExpressions.Regex(&quot;\\G\\s*;\\s*([^=;\&quot;\\s]+)\\s*=\\s*(?:\&quot;((?:[^\&quot;\\\\]|\\\\.)*)\&quot;|([^;\&quot;\\s]*))\\s*&quot;);

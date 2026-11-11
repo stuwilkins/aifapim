@@ -292,5 +292,33 @@
   "body": "--XYZ\r\nContent-Disposition: form-data; NAME=\"web_grounding\"\r\n\r\ntrue\r\n--XYZ--\r\n",
   "blocked": true,
   "model": ""
+ },
+ {
+  "name": "regex-special boundary, true: a.b+c(d) e",
+  "contentType": "multipart/form-data; boundary=\"a.b+c(d) e\"",
+  "body": "--a.b+c(d) e\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\ntrue\r\n--a.b+c(d) e--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "regex-special boundary, false + model: a.b+c(d) e",
+  "contentType": "multipart/form-data; boundary=\"a.b+c(d) e\"",
+  "body": "--a.b+c(d) e\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nm10\r\n--a.b+c(d) e\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\nfalse\r\n--a.b+c(d) e--\r\n",
+  "blocked": false,
+  "model": "m10"
+ },
+ {
+  "name": "regex-special boundary, true: ----=_Part_1.2+3[x]^$|{y}?*\\z",
+  "contentType": "multipart/form-data; boundary=\"----=_Part_1.2+3[x]^$|{y}?*\\z\"",
+  "body": "------=_Part_1.2+3[x]^$|{y}?*\\z\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\ntrue\r\n------=_Part_1.2+3[x]^$|{y}?*\\z--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "regex-special boundary, false + model: ----=_Part_1.2+3[x]^$|{y}?*\\z",
+  "contentType": "multipart/form-data; boundary=\"----=_Part_1.2+3[x]^$|{y}?*\\z\"",
+  "body": "------=_Part_1.2+3[x]^$|{y}?*\\z\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nm10\r\n------=_Part_1.2+3[x]^$|{y}?*\\z\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\nfalse\r\n------=_Part_1.2+3[x]^$|{y}?*\\z--\r\n",
+  "blocked": false,
+  "model": "m10"
  }
 ]

@@ -12,6 +12,23 @@ param(
     [string]$CasesFile = (Join-Path $PSScriptRoot 'mai-cases.json')
 )
 $WarningPreference = 'SilentlyContinue'
+
+# APIM allows only some members of some types in a policy expression, and the C# compiler here
+# knows nothing about that list. The documented members of Regex are the ones below; one that is
+# not listed (for example Regex.Escape) fails the deployment with a ValidationError. Check every
+# policy file for it before running the cases.
+$allowedRegex = @('IsMatch', 'Match', 'Matches', 'Replace', 'Unescape', 'Split')
+$policyDir = Split-Path -Parent $Policy
+$regexBad = 0
+foreach ($file in Get-ChildItem -Path $policyDir -Filter '*.xml') {
+    $text = Get-Content -Raw $file.FullName
+    foreach ($m in [regex]::Matches($text, 'RegularExpressions\.Regex\.(\w+)')) {
+        if ($allowedRegex -notcontains $m.Groups[1].Value) {
+            $regexBad++
+            'NOT ALLOWED  {0}: Regex.{1} is not an APIM-allowed member' -f $file.Name, $m.Groups[1].Value
+        }
+    }
+}
 [xml]$x = Get-Content -Raw $Policy
 function Expr($name) {
     $v = ($x.SelectNodes("//set-variable") | Where-Object { $_.name -eq $name }).value.Trim()
@@ -47,5 +64,5 @@ foreach ($c in $cases) {
     if (-not $ok) { $bad++ }
     '{0,-6} {1,-50} blocked={2,-5} model={3}' -f $(if ($ok) { 'OK' } else { 'WRONG' }), $c.name, $blocked, $model
 }
-"failures: $bad of $($cases.Count)"
-if ($bad -gt 0) { exit 1 }
+"failures: $bad of $($cases.Count); disallowed Regex members: $regexBad"
+if (($bad + $regexBad) -gt 0) { exit 1 }
