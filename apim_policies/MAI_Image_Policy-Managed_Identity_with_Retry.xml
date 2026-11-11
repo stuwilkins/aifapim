@@ -14,8 +14,9 @@
              the Content-Disposition header of each part names the field, so text
              inside a field or a file cannot pose as another field. A form that
              cannot be read with certainty (no or repeated boundary parameter, no
-             closing delimiter, a part without a header block, a repeated or
-             RFC 2231 name, an error) gets the key #ambiguous. The reader is
+             closing delimiter, a part without a header block, a disposition
+             header whose parameters do not parse quote by quote, a repeated
+             or RFC 2231 name, an error) gets the key #ambiguous. The reader is
              written to refuse rather than guess. -->
         <set-variable name="formFields" value="@{
             try {
@@ -36,6 +37,7 @@
                 var delim = System.Text.RegularExpressions.Regex.Escape(&quot;--&quot; + boundary);
                 if (!System.Text.RegularExpressions.Regex.IsMatch(text, &quot;(?m)^&quot; + delim + &quot;--[ \\t]*$&quot;)) { fields[&quot;#ambiguous&quot;] = true; return fields; }
                 var chunks = System.Text.RegularExpressions.Regex.Split(text, &quot;(?m)^&quot; + delim + &quot;(?:--)?[ \\t]*$&quot;);
+                var parameter = new System.Text.RegularExpressions.Regex(&quot;\\G\\s*;\\s*([^=;\&quot;\\s]+)\\s*=\\s*(?:\&quot;((?:[^\&quot;\\\\]|\\\\.)*)\&quot;|([^;\&quot;\\s]*))\\s*&quot;);
                 for (int i = 1; i &lt; chunks.Length - 1; i++) {
                     var part = chunks[i];
                     if (part.StartsWith(&quot;\n&quot;)) { part = part.Substring(1); }
@@ -50,15 +52,27 @@
                         value = part.Substring(sep + 2);
                     }
                     var dispositions = 0;
+                    var names = 0;
                     string name = null;
                     foreach (var line in System.Text.RegularExpressions.Regex.Replace(headers, &quot;\n[ \\t]+&quot;, &quot; &quot;).Split('\n')) {
                         if (!line.StartsWith(&quot;content-disposition:&quot;, StringComparison.OrdinalIgnoreCase)) { continue; }
                         dispositions++;
-                        if (System.Text.RegularExpressions.Regex.IsMatch(line, &quot;(^|[;\\s])name\\*&quot;, System.Text.RegularExpressions.RegexOptions.IgnoreCase)) { fields[&quot;#ambiguous&quot;] = true; return fields; }
-                        var nm = System.Text.RegularExpressions.Regex.Match(line, &quot;(^|[;\\s])name\\s*=\\s*(?:\&quot;([^\&quot;]*)\&quot;|([^;\\s]+))&quot;, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                        if (nm.Success) { name = nm.Groups[2].Success ? nm.Groups[2].Value : nm.Groups[3].Value; }
+                        var disposition = line.Substring(line.IndexOf(':') + 1).Trim();
+                        var pos = disposition.IndexOf(';');
+                        if (pos &lt; 0) { pos = disposition.Length; }
+                        while (pos &lt; disposition.Length) {
+                            var pm = parameter.Match(disposition, pos);
+                            if (!pm.Success) { fields[&quot;#ambiguous&quot;] = true; return fields; }
+                            pos = pm.Index + pm.Length;
+                            var pk = pm.Groups[1].Value.ToLowerInvariant();
+                            if (pk == &quot;name*&quot;) { fields[&quot;#ambiguous&quot;] = true; return fields; }
+                            if (pk == &quot;name&quot;) {
+                                names++;
+                                name = pm.Groups[2].Success ? System.Text.RegularExpressions.Regex.Replace(pm.Groups[2].Value, &quot;\\\\(.)&quot;, &quot;$1&quot;) : pm.Groups[3].Value;
+                            }
+                        }
                     }
-                    if (dispositions &gt; 1) { fields[&quot;#ambiguous&quot;] = true; return fields; }
+                    if (dispositions &gt; 1 || names &gt; 1) { fields[&quot;#ambiguous&quot;] = true; return fields; }
                     if (name == null) { continue; }
                     var key = name.Trim().ToLowerInvariant();
                     if (!(fields[key] is JArray)) { fields[key] = new JArray(); }

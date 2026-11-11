@@ -222,5 +222,75 @@
   "body": "{\"model\":\"m4\",\"web_grounding\":false}",
   "blocked": false,
   "model": "m4"
+ },
+ {
+  "name": "quoted note containing name=prompt before real name (Copilot)",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; note=\"x; name=prompt \"; name=\"web_grounding\"\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "quoted note before real name, value false",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; note=\"x; name=prompt \"; name=\"web_grounding\"\r\n\r\nfalse\r\n--XYZ\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nm6\r\n--XYZ--\r\n",
+  "blocked": false,
+  "model": "m6"
+ },
+ {
+  "name": "real name first, quoted note after",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"; note=\"x; name=prompt \"\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "filename containing name=\"web_grounding\" text",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"image\"; filename=\"name=\\\"web_grounding\\\".png\"\r\n\r\nbytes\r\n--XYZ\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nm7\r\n--XYZ--\r\n",
+  "blocked": false,
+  "model": "m7"
+ },
+ {
+  "name": "two name parameters in one header",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"a\"; name=\"web_grounding\"\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "junk parameter after name",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"; junk\r\n\r\nfalse\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "unterminated quote",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\r\n\r\nfalse\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "trailing semicolon",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\";\r\n\r\nfalse\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "windows path filename is fine",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"image\"; filename=\"C:\\dir\\a.png\"\r\n\r\nbytes\r\n--XYZ\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nm8\r\n--XYZ--\r\n",
+  "blocked": false,
+  "model": "m8"
+ },
+ {
+  "name": "upper-case parameter key",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; NAME=\"web_grounding\"\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
  }
 ]
