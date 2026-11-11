@@ -347,15 +347,21 @@ Fetch the keys with
   `eastus2` in that window. If Claude is later deployed in `eastus`, add it
   to `modelDeployments[0]` and it will fail over automatically.
 - **Model router** (`model-router`, Microsoft's trained router, format
-  `OpenAI`) is a deployment like any other and is served by the OpenAI
-  routes (`/deployments/model-router/chat/completions`,
-  `/openai/v1/responses`); clients name it as the `model`. It picks one of
-  the models in the entry's `routing.models` per request (mode `balanced`,
-  `cost` or `quality`) and names it in the answer's `model` field, so a
-  catalog entry's context window is the smallest of those models. Things to
-  know:
+  `OpenAI`) is a deployment like any other, reached through
+  `/deployments/model-router/chat/completions` (or `/openai/v1/chat/completions`);
+  clients name it as the `model`. **It is Chat Completions only:** on dev,
+  2026-11-11, `/openai/v1/responses` answered HTTP 400 "The requested
+  operation is unsupported" (the same is reported for OpenCode,
+  opencode#52113). Clients that speak only Responses, which includes the
+  OpenCode provider that ansible builds from `/catalog` (`@ai-sdk/openai`),
+  cannot use it, so it is not offered in `/catalog` (see `aifapim-config`).
+  It picks one of the models in the entry's `routing.models` per request (mode
+  `balanced`, `cost` or `quality`) and names it in the answer's `model` field,
+  so a catalog entry's context window would be the smallest of those models.
+  Things to know:
   - `modules/aif-deployments.bicep` passes `routing` through and applies
     `raiPolicyName` to it (the content filter is otherwise `gpt-` only).
+    Azure accepted `routing` in API version `2025-10-01-preview` on dev.
   - Use `DataZoneStandard`. Its quota is `OpenAI.DataZoneStandard.ModelRouter`
     (4000 per region for the subscription on 2026-11-10, prod and dev share
     it). Version `2025-11-18` is updated in place by Microsoft and retires
@@ -365,10 +371,6 @@ Fetch the keys with
   - The gateway's `Model` dimension says `model-router`, not the model that
     answered (that is in the response body). The cost mapping needs a router
     entry once its meters show in Cost Management; do not guess them.
-  - Not verified until the first dev run: that `/openai/v1/responses` works
-    with the router, and that Bicep accepts `routing` in API version
-    `2025-10-01-preview`. `pixi run test-dev` in `aifapim-config` checks the
-    first.
 - **`claude-auto`** is a model name of the Anthropic API, not a deployment.
   With the `claudeAuto` parameter set (`classifierModel`, `simpleModel`,
   `mediumModel`, `complexModel`, all deployments in the primary region) the
