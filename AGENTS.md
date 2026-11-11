@@ -174,6 +174,15 @@ Fetch the keys with
     are retried on it. The policy refuses `web_grounding: true` with HTTP 400,
     because that option sends the prompt to Bing, outside Foundry, and keeps
     only a plain deployment name as the `Model` dimension of `Image Count`.
+    For a multipart edit it reads the form once into `formFields`, splitting on
+    the delimiter lines of the declared boundary and naming each field only from
+    its `Content-Disposition` header, so text inside a prompt or file cannot pose
+    as, or hide, a field. It refuses a `web_grounding` that is not `false` or
+    `0`, a repeated one, and any form it cannot read with certainty (no or
+    repeated `boundary`, no closing delimiter, an RFC 2231 `name*`). Check a
+    change to it with `pwsh -NoProfile -File tests/policy/mai-policy-test.ps1`:
+    it compiles the real expressions from the XML and runs 32 multipart and JSON
+    cases (needs PowerShell 7; it does not run APIM).
     Output is always one PNG; width and height are at least 768 with a total of
     at most 2,359,296 pixels. Grouped under `apimProductName` product and the
     service products.

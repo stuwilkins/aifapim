@@ -7,9 +7,74 @@
               __ALLOWED_CLIENT_IPS__
         </ip-filter>
         <base />
+        <!-- A multipart body (image edits) is read once, into formFields: a JObject
+             of lowercase field name to the list of its values (cut to 256
+             characters), or null for any other body. The form is split on the
+             delimiter lines of the boundary its Content-Type declares, and only
+             the Content-Disposition header of each part names the field, so text
+             inside a field or a file cannot pose as another field. A form that
+             cannot be read with certainty (no or repeated boundary parameter, no
+             closing delimiter, a part without a header block, a repeated or
+             RFC 2231 name, an error) gets the key #ambiguous. The reader is
+             written to refuse rather than guess. -->
+        <set-variable name="formFields" value="@{
+            try {
+                var contentType = context.Request.Headers.GetValueOrDefault(&quot;Content-Type&quot;, &quot;&quot;);
+                if (!contentType.StartsWith(&quot;multipart/form-data&quot;, StringComparison.OrdinalIgnoreCase)) { return null; }
+                var fields = new JObject();
+                string boundary = null;
+                var cparts = contentType.Split(';');
+                for (int i = 1; i &lt; cparts.Length; i++) {
+                    var eq = cparts[i].IndexOf('=');
+                    if (eq &gt; 0 &amp;&amp; cparts[i].Substring(0, eq).Trim().Equals(&quot;boundary&quot;, StringComparison.OrdinalIgnoreCase)) {
+                        if (boundary != null) { fields[&quot;#ambiguous&quot;] = true; return fields; }
+                        boundary = cparts[i].Substring(eq + 1).Trim().Trim('&quot;');
+                    }
+                }
+                if (string.IsNullOrEmpty(boundary)) { fields[&quot;#ambiguous&quot;] = true; return fields; }
+                var text = context.Request.Body.As&lt;string&gt;(preserveContent: true).Replace(&quot;\r\n&quot;, &quot;\n&quot;);
+                var delim = System.Text.RegularExpressions.Regex.Escape(&quot;--&quot; + boundary);
+                if (!System.Text.RegularExpressions.Regex.IsMatch(text, &quot;(?m)^&quot; + delim + &quot;--[ \\t]*$&quot;)) { fields[&quot;#ambiguous&quot;] = true; return fields; }
+                var chunks = System.Text.RegularExpressions.Regex.Split(text, &quot;(?m)^&quot; + delim + &quot;(?:--)?[ \\t]*$&quot;);
+                for (int i = 1; i &lt; chunks.Length - 1; i++) {
+                    var part = chunks[i];
+                    if (part.StartsWith(&quot;\n&quot;)) { part = part.Substring(1); }
+                    string headers = &quot;&quot;;
+                    string value = &quot;&quot;;
+                    if (part.StartsWith(&quot;\n&quot;)) {
+                        value = part.Substring(1);
+                    } else {
+                        var sep = part.IndexOf(&quot;\n\n&quot;, StringComparison.Ordinal);
+                        if (sep &lt; 0) { fields[&quot;#ambiguous&quot;] = true; return fields; }
+                        headers = part.Substring(0, sep);
+                        value = part.Substring(sep + 2);
+                    }
+                    var dispositions = 0;
+                    string name = null;
+                    foreach (var line in System.Text.RegularExpressions.Regex.Replace(headers, &quot;\n[ \\t]+&quot;, &quot; &quot;).Split('\n')) {
+                        if (!line.StartsWith(&quot;content-disposition:&quot;, StringComparison.OrdinalIgnoreCase)) { continue; }
+                        dispositions++;
+                        if (System.Text.RegularExpressions.Regex.IsMatch(line, &quot;(^|[;\\s])name\\*&quot;, System.Text.RegularExpressions.RegexOptions.IgnoreCase)) { fields[&quot;#ambiguous&quot;] = true; return fields; }
+                        var nm = System.Text.RegularExpressions.Regex.Match(line, &quot;(^|[;\\s])name\\s*=\\s*(?:\&quot;([^\&quot;]*)\&quot;|([^;\\s]+))&quot;, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (nm.Success) { name = nm.Groups[2].Success ? nm.Groups[2].Value : nm.Groups[3].Value; }
+                    }
+                    if (dispositions &gt; 1) { fields[&quot;#ambiguous&quot;] = true; return fields; }
+                    if (name == null) { continue; }
+                    var key = name.Trim().ToLowerInvariant();
+                    if (!(fields[key] is JArray)) { fields[key] = new JArray(); }
+                    if (value.EndsWith(&quot;\n&quot;)) { value = value.Substring(0, value.Length - 1); }
+                    ((JArray)fields[key]).Add(value.Length &gt; 256 ? value.Substring(0, 256) : value);
+                }
+                return fields;
+            } catch {
+                var failed = new JObject();
+                failed[&quot;#ambiguous&quot;] = true;
+                return failed;
+            }
+        }" />
         <!-- The model name is the deployment name. Generations send JSON; edits
-             send multipart form data, so the form text is read for them. A
-             body over 25 MB is not read. Only a plain deployment name is kept,
+             send multipart form data, which formFields has read. A body over 25
+             MB is not used for the name. Only a plain deployment name is kept,
              so a client cannot put arbitrary text into the metric dimension. -->
         <set-variable name="requestModel" value="@{
             try {
@@ -17,10 +82,10 @@
                 var lengthText = context.Request.Headers.GetValueOrDefault(&quot;Content-Length&quot;, &quot;0&quot;);
                 if (lengthText.Length &gt; 8 || (lengthText.Length == 8 &amp;&amp; string.CompareOrdinal(lengthText, &quot;25000000&quot;) &gt; 0)) { return &quot;&quot;; }
                 var model = &quot;&quot;;
-                if (contentType.StartsWith(&quot;multipart/form-data&quot;, StringComparison.OrdinalIgnoreCase)) {
-                    var text = context.Request.Body.As&lt;string&gt;(preserveContent: true);
-                    var m = System.Text.RegularExpressions.Regex.Match(text, &quot;name=\&quot;model\&quot;[^\\r\\n]*\\r?\\n(?:[^\\r\\n]+\\r?\\n)*\\r?\\n([^\\r\\n]+)&quot;);
-                    model = m.Success ? m.Groups[1].Value.Trim() : &quot;&quot;;
+                var fields = context.Variables.GetValueOrDefault&lt;JObject&gt;(&quot;formFields&quot;, null);
+                if (fields != null) {
+                    var mf = fields[&quot;model&quot;] as JArray;
+                    model = (mf != null &amp;&amp; mf.Count == 1 &amp;&amp; (fields[&quot;#ambiguous&quot;] as JValue) == null) ? ((string)mf[0]).Trim() : &quot;&quot;;
                 } else {
                     var body = context.Request.Body.As&lt;JObject&gt;(preserveContent: true);
                     model = (string)body[&quot;model&quot;] ?? &quot;&quot;;
@@ -31,38 +96,21 @@
             }
         }" />
         <!-- web_grounding sends the prompt to Bing, a service outside Foundry,
-             so it is refused. JSON bodies are parsed. A multipart body is split
-             on the boundary its Content-Type declares and only the headers of
-             each part decide which field a part is, so text inside another field
-             cannot pose as, or hide, the web_grounding field. The request is
-             refused when the field is not exactly false or 0, when it appears
-             twice, and when the form cannot be read (no boundary, an error). -->
+             so it is refused. JSON bodies are parsed. A multipart body is judged
+             from formFields: the request is refused when the field is anything
+             other than false or 0, when it appears twice, and when the form was
+             marked #ambiguous. -->
         <set-variable name="webGrounding" value="@{
             try {
                 var contentType = context.Request.Headers.GetValueOrDefault(&quot;Content-Type&quot;, &quot;&quot;);
-                if (contentType.StartsWith(&quot;multipart/form-data&quot;, StringComparison.OrdinalIgnoreCase)) {
-                    try {
-                        var bm = System.Text.RegularExpressions.Regex.Match(contentType, &quot;boundary=(?:\&quot;([^\&quot;]+)\&quot;|([^;\\s]+))&quot;, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                        if (!bm.Success) { return true; }
-                        var boundary = bm.Groups[1].Success ? bm.Groups[1].Value : bm.Groups[2].Value;
-                        var text = context.Request.Body.As&lt;string&gt;(preserveContent: true);
-                        var found = 0;
-                        var enabled = false;
-                        foreach (var part in text.Split(new[] { &quot;--&quot; + boundary }, StringSplitOptions.None)) {
-                            var sepLen = 4;
-                            var sep = part.IndexOf(&quot;\r\n\r\n&quot;, StringComparison.Ordinal);
-                            if (sep &lt; 0) { sepLen = 2; sep = part.IndexOf(&quot;\n\n&quot;, StringComparison.Ordinal); }
-                            if (sep &lt; 0) { continue; }
-                            var named = System.Text.RegularExpressions.Regex.IsMatch(part.Substring(0, sep), &quot;(^|\\n)Content-Disposition:[^\\r\\n]*[;\\s]name=(\&quot;web_grounding\&quot;|web_grounding([;\\s]|$))&quot;, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                            if (!named) { continue; }
-                            found++;
-                            var gv = part.Substring(sep + sepLen).Trim().ToLowerInvariant();
-                            if (gv != &quot;false&quot; &amp;&amp; gv != &quot;0&quot;) { enabled = true; }
-                        }
-                        return enabled || found &gt; 1;
-                    } catch {
-                        return true;
-                    }
+                var fields = context.Variables.GetValueOrDefault&lt;JObject&gt;(&quot;formFields&quot;, null);
+                if (fields != null) {
+                    if ((fields[&quot;#ambiguous&quot;] as JValue) != null) { return true; }
+                    var wg = fields[&quot;web_grounding&quot;] as JArray;
+                    if (wg == null) { return false; }
+                    if (wg.Count &gt; 1) { return true; }
+                    var gv = ((string)wg[0]).Trim().ToLowerInvariant();
+                    return gv != &quot;false&quot; &amp;&amp; gv != &quot;0&quot;;
                 }
                 var body = context.Request.Body.As&lt;JObject&gt;(preserveContent: true);
                 var token = body[&quot;web_grounding&quot;];

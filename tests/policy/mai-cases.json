@@ -1,0 +1,226 @@
+[
+ {
+  "name": "no grounding",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\nhi\r\n--XYZ\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nMAI-Image-2.6\r\n--XYZ--\r\n",
+  "blocked": false,
+  "model": "MAI-Image-2.6"
+ },
+ {
+  "name": "grounding true",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\nhi\r\n--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "grounding false",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\nfalse\r\n--XYZ--\r\n",
+  "blocked": false,
+  "model": ""
+ },
+ {
+  "name": "false with Content-Type",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\nContent-Type: text/plain\r\n\r\nfalse\r\n--XYZ--\r\n",
+  "blocked": false,
+  "model": ""
+ },
+ {
+  "name": "true with Content-Type",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\nContent-Type: text/plain\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "prompt imitates false field first, real true after",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\nx\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\nfalse\r\n--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "prompt only mentions web_grounding",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\nwhat is name=\"web_grounding\" and web_grounding=true\r\n--XYZ\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nm1\r\n--XYZ--\r\n",
+  "blocked": false,
+  "model": "m1"
+ },
+ {
+  "name": "duplicate false+false",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\nfalse\r\n--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\nfalse\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "duplicate false then true",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\nfalse\r\n--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "filename lookalike",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"image\"; filename=\"web_grounding\"\r\n\r\nbytes\r\n--XYZ--\r\n",
+  "blocked": false,
+  "model": ""
+ },
+ {
+  "name": "LF only true",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\nContent-Disposition: form-data; name=\"web_grounding\"\n\nTRUE\n--XYZ--\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "unquoted name true",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=web_grounding\r\n\r\n1\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "spaces around = (Copilot case 1)",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name = \"web_grounding\"\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "header contains boundary text (case 2)",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"prompt\"; note=\"--XYZ\"\r\n\r\nhi\r\n--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "notboundary=decoy before boundary (case 3)",
+  "contentType": "multipart/form-data; notboundary=decoy; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "two boundary params",
+  "contentType": "multipart/form-data; boundary=AAA; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "no boundary param",
+  "contentType": "multipart/form-data",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\nhi\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "quoted boundary",
+  "contentType": "multipart/form-data; boundary=\"XYZ\"",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "quoted boundary, false fine",
+  "contentType": "multipart/form-data; boundary=\"XYZ\"",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\nfalse\r\n--XYZ\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nm9\r\n--XYZ--\r\n",
+  "blocked": false,
+  "model": "m9"
+ },
+ {
+  "name": "no closing delimiter",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\nfalse\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "name* (RFC 2231)",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name*=UTF-8''web%5Fgrounding\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "filename* with real name is fine",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"image\"; filename*=UTF-8''caf%C3%A9.png\r\n\r\nbytes\r\n--XYZ\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nm2\r\n--XYZ--\r\n",
+  "blocked": false,
+  "model": "m2"
+ },
+ {
+  "name": "folded header",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data;\r\n  name=\"web_grounding\"\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "two content-disposition headers",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"prompt\"\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "upper-case field name",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"Web_Grounding\"\r\n\r\ntrue\r\n--XYZ--\r\n",
+  "blocked": true,
+  "model": ""
+ },
+ {
+  "name": "model twice -> no model",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\na1\r\n--XYZ\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nb1\r\n--XYZ--\r\n",
+  "blocked": false,
+  "model": ""
+ },
+ {
+  "name": "model spoof in prompt text",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\nx\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nfake\r\n--XYZ\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nreal1\r\n--XYZ--\r\n",
+  "blocked": false,
+  "model": "real1"
+ },
+ {
+  "name": "model with part header",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"model\"\r\nContent-Type: text/plain\r\n\r\nm3\r\n--XYZ--\r\n",
+  "blocked": false,
+  "model": "m3"
+ },
+ {
+  "name": "binary-looking file part, then fields",
+  "contentType": "multipart/form-data; boundary=XYZ",
+  "body": "--XYZ\r\nContent-Disposition: form-data; name=\"image\"; filename=\"a.png\"\r\nContent-Type: image/png\r\n\r\n\u0089PNG\r\n\u001a\n\u0000\u0001--not-a-boundary\r\n--XYZ\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nm5\r\n--XYZ\r\nContent-Disposition: form-data; name=\"web_grounding\"\r\n\r\n0\r\n--XYZ--\r\n",
+  "blocked": false,
+  "model": "m5"
+ },
+ {
+  "name": "JSON no grounding",
+  "contentType": "application/json",
+  "body": "{\"model\":\"m4\",\"prompt\":\"hi\"}",
+  "blocked": false,
+  "model": "m4"
+ },
+ {
+  "name": "JSON grounding true",
+  "contentType": "application/json",
+  "body": "{\"model\":\"m4\",\"web_grounding\":true}",
+  "blocked": true,
+  "model": "m4"
+ },
+ {
+  "name": "JSON grounding false",
+  "contentType": "application/json",
+  "body": "{\"model\":\"m4\",\"web_grounding\":false}",
+  "blocked": false,
+  "model": "m4"
+ }
+]
