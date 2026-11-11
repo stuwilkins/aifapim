@@ -31,22 +31,38 @@
             }
         }" />
         <!-- web_grounding sends the prompt to Bing, a service outside Foundry,
-             so it is refused. JSON bodies are parsed. For multipart the field
-             is read after any part headers (a Content-Type line is allowed), and
-             a form that names the field but whose value cannot be read as false
-             or 0 is refused too, so a request that cannot be checked is not
-             passed on. -->
+             so it is refused. JSON bodies are parsed. A multipart body is split
+             on the boundary its Content-Type declares and only the headers of
+             each part decide which field a part is, so text inside another field
+             cannot pose as, or hide, the web_grounding field. The request is
+             refused when the field is not exactly false or 0, when it appears
+             twice, and when the form cannot be read (no boundary, an error). -->
         <set-variable name="webGrounding" value="@{
             try {
                 var contentType = context.Request.Headers.GetValueOrDefault(&quot;Content-Type&quot;, &quot;&quot;);
                 if (contentType.StartsWith(&quot;multipart/form-data&quot;, StringComparison.OrdinalIgnoreCase)) {
-                    var text = context.Request.Body.As&lt;string&gt;(preserveContent: true);
-                    var gm = System.Text.RegularExpressions.Regex.Match(text, &quot;name=\&quot;web_grounding\&quot;[^\\r\\n]*\\r?\\n(?:[^\\r\\n]+\\r?\\n)*\\r?\\n([^\\r\\n]*)&quot;, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                    if (!gm.Success) {
-                        return text.IndexOf(&quot;web_grounding&quot;, StringComparison.OrdinalIgnoreCase) &gt;= 0;
+                    try {
+                        var bm = System.Text.RegularExpressions.Regex.Match(contentType, &quot;boundary=(?:\&quot;([^\&quot;]+)\&quot;|([^;\\s]+))&quot;, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (!bm.Success) { return true; }
+                        var boundary = bm.Groups[1].Success ? bm.Groups[1].Value : bm.Groups[2].Value;
+                        var text = context.Request.Body.As&lt;string&gt;(preserveContent: true);
+                        var found = 0;
+                        var enabled = false;
+                        foreach (var part in text.Split(new[] { &quot;--&quot; + boundary }, StringSplitOptions.None)) {
+                            var sepLen = 4;
+                            var sep = part.IndexOf(&quot;\r\n\r\n&quot;, StringComparison.Ordinal);
+                            if (sep &lt; 0) { sepLen = 2; sep = part.IndexOf(&quot;\n\n&quot;, StringComparison.Ordinal); }
+                            if (sep &lt; 0) { continue; }
+                            var named = System.Text.RegularExpressions.Regex.IsMatch(part.Substring(0, sep), &quot;(^|\\n)Content-Disposition:[^\\r\\n]*[;\\s]name=(\&quot;web_grounding\&quot;|web_grounding([;\\s]|$))&quot;, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                            if (!named) { continue; }
+                            found++;
+                            var gv = part.Substring(sep + sepLen).Trim().ToLowerInvariant();
+                            if (gv != &quot;false&quot; &amp;&amp; gv != &quot;0&quot;) { enabled = true; }
+                        }
+                        return enabled || found &gt; 1;
+                    } catch {
+                        return true;
                     }
-                    var gv = gm.Groups[1].Value.Trim().ToLowerInvariant();
-                    return gv != &quot;false&quot; &amp;&amp; gv != &quot;0&quot;;
                 }
                 var body = context.Request.Body.As&lt;JObject&gt;(preserveContent: true);
                 var token = body[&quot;web_grounding&quot;];
