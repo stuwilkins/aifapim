@@ -7,6 +7,14 @@
               __ALLOWED_CLIENT_IPS__
         </ip-filter>
         <base />
+        <!-- Who is calling. A keyed request is named by its subscription. A keyless request
+             came through the open product (Product_EntraOpen_Policy.xml), whose policy has
+             validated the token and set callerId (the object id, which is also how personal
+             subscriptions are named) and callerName. The token limit counter, the metric
+             dimensions and the usage record read these two variables, never the
+             subscription directly: context.Subscription is null without a key. -->
+        <set-variable name="usageId" value="@(context.Subscription == null ? (string)context.Variables.GetValueOrDefault(&quot;callerId&quot;, &quot;&quot;) : context.Subscription.Id)" />
+        <set-variable name="usageName" value="@(context.Subscription == null ? (string)context.Variables.GetValueOrDefault(&quot;callerName&quot;, &quot;&quot;) : context.Subscription.Name)" />
         <!-- Extract the deployment ID from the URL path after '/deployments/' -->
         <set-variable name="deploymentId" value="@(context.Request.Url.Path.Split('/').ElementAtOrDefault(1))" />
         <!-- Deployment name: the path segment after 'deployments'. Used to decide
@@ -41,11 +49,11 @@
         <choose>
             <when condition="@(!context.Variables.GetValueOrDefault&lt;bool&gt;(&quot;isImageRequest&quot;, false))">
         <!-- Emit token metrics with the deployment ID as a dimension -->
-        <azure-openai-token-limit tokens-per-minute="10000000" counter-key="@(context.Subscription.Id)" estimate-prompt-tokens="true" tokens-consumed-header-name="consumed-tokens" remaining-tokens-header-name="remaining-tokens" />
+        <azure-openai-token-limit tokens-per-minute="10000000" counter-key="@((string)context.Variables.GetValueOrDefault(&quot;usageId&quot;, &quot;&quot;))" estimate-prompt-tokens="true" tokens-consumed-header-name="consumed-tokens" remaining-tokens-header-name="remaining-tokens" />
         <azure-openai-emit-token-metric>
             <dimension name="API ID" />
-            <dimension name="Subscription ID" />
-            <dimension name="Subscription Name" value="@(context.Subscription.Name)" />
+            <dimension name="Subscription ID" value="@((string)context.Variables.GetValueOrDefault(&quot;usageId&quot;, &quot;&quot;))" />
+            <dimension name="Subscription Name" value="@((string)context.Variables.GetValueOrDefault(&quot;usageName&quot;, &quot;&quot;))" />
             <dimension name="User ID" />
             <dimension name="Product ID" />
             <!-- Model dimension: AOAI clients pass the deployment name in the URL
@@ -90,8 +98,8 @@
                     }
                 }" namespace="__METRIC_NAMESPACE__">
                     <dimension name="API ID" />
-                    <dimension name="Subscription ID" />
-                    <dimension name="Subscription Name" value="@(context.Subscription.Name)" />
+                    <dimension name="Subscription ID" value="@((string)context.Variables.GetValueOrDefault(&quot;usageId&quot;, &quot;&quot;))" />
+                    <dimension name="Subscription Name" value="@((string)context.Variables.GetValueOrDefault(&quot;usageName&quot;, &quot;&quot;))" />
                     <dimension name="User ID" />
                     <dimension name="Product ID" />
                     <dimension name="Model" value="@((string)context.Variables.GetValueOrDefault(&quot;deploymentName&quot;, &quot;&quot;))" />

@@ -375,8 +375,11 @@ Pay particular attention to:
   same four APIs. `allowedClientIps` locks a product to those callers (a CIDR
   covers its whole range) on top of the global list. `entraAuth`
   (`{ tenantId, audience, role }`) makes the product need a Microsoft Entra ID
-  app-only token as well as the key (see "Authentication model"). See
-  `AGENTS.md` "Products".
+  app-only token as well as the key (see "Authentication model"). `open: true`
+  makes it the open product: no key, a Microsoft Entra ID token alone (see
+  "Open product: Entra token, no key"). See `AGENTS.md` "Products".
+- `usageTrace` — optional; writes one Application Insights trace per request to
+  the five inference APIs that names the caller. Needed for the open product.
 
 ## Repository Structure
 
@@ -514,6 +517,63 @@ placeholders in `aifapim.example.bicepparam`.
 
 Without `entraAuth` nothing changes. Entra ID token validation is not applied
 to the user product or to the other service products.
+
+### Open product: Entra token, no key
+
+One entry of `serviceProducts` can set `open: true`. Callers of that product
+send no subscription key, only `Authorization: Bearer <token>`. The product's
+policy, `apim_policies/Product_EntraOpen_Policy.xml`, is then the only access
+check, and accepts two kinds of caller:
+
+- **A person**: a delegated token for this gateway whose `scp` claim holds
+  `entraAuth.scope` and whose `roles` claim holds `entraAuth.userRole` (an app
+  role assigned to the person, or to a group they are in, in Entra ID).
+  `entraAuth.clientApplicationIds` (optional) limits which client apps may ask
+  for a person's token.
+- **A service principal**: an app-only token obtained with a certificate that
+  holds `entraAuth.role`, as for the key-and-token product.
+
+Things to know:
+
+- **It needs all of `tenantId`, `audience`, `role`, `scope` and
+  `userRole`.** With less, or with no `entraAuth`, the product renders a
+  policy that answers every request with HTTP 503, never an
+  inheritance-only policy, which would leave the product open to anyone.
+- **An API can be in only one open product.** The API policies still say a
+  subscription is required; per the APIM documentation a request with no key
+  (or a key that is not valid) is handled in the open product, and a request
+  with a valid key is handled in the key's own product as before.
+- **The caller is the token's `oid`** (the object id of the person or service
+  principal), which is also how personal subscriptions are named. The API
+  policies read the caller from two variables, `usageId` and `usageName`, which
+  are the subscription's id and name for a keyed request and the token's `oid`
+  and display name for a keyless one. The token limit counter, the
+  `Subscription ID` and `Subscription Name` metric dimensions and the request
+  body log use them, so a person has one limit and one metric series however
+  they authenticate.
+- **The caller's token is dropped** (`Authorization` is deleted) once it has
+  been validated, so it never reaches the models.
+- **Usage per caller** comes from the usage trace (`usageTrace = true`): one
+  `AppTraces` row per request with the caller, request id, API, product and
+  model. Join it to `ApiManagementGatewayLlmLog` on `CorrelationId` for tokens
+  (Anthropic completion tokens are not measured for streamed requests, as for
+  keys). A keyless request has no subscription, so the gateway log alone cannot
+  name the caller.
+
+  ```kusto
+  AppTraces
+  | where TimeGenerated > ago(1d) and isnotempty(tostring(Properties.CallerType))
+  | extend RequestId = tostring(Properties.RequestId), Caller = tostring(Properties.CallerId)
+  | join kind=inner (ApiManagementGatewayLlmLog | where TimeGenerated > ago(1d)) on $left.RequestId == $right.CorrelationId
+  | summarize Requests = count(), PromptTokens = sum(PromptTokens), CompletionTokens = sum(CompletionTokens) by Caller, CallerName = tostring(Properties.CallerName), CallerType = tostring(Properties.CallerType)
+  ```
+
+- **Who may get a token** is decided in Entra ID: expose the delegated scope on
+  the gateway API app and a user app role, pre-authorize the client apps, assign
+  the role to the intended groups, and set "Assignment required" on the
+  enterprise application so only they receive a token. The gateway checks the
+  role as well, so widening access later is a role assignment, not a gateway
+  deployment. Nothing here lists users.
 
 ## Token Usage Analytics
 

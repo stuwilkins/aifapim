@@ -1,0 +1,26 @@
+<!-- Usage record. One Application Insights trace per request that names the caller:
+             the object id of a person or service principal (keyless request, through the
+             open product), or the subscription id of a key. aifapim.bicep substitutes this
+             block into the five inference policies, through the same marker as the request
+             body log, when usageTrace is true. The trace is not sampled and lands in the
+             AppTraces table with the values below as Properties. RequestId is the
+             CorrelationId of ApiManagementGatewayLogs and ApiManagementGatewayLlmLog,
+             so joining on it gives the tokens and the model for the caller. The model is
+             cleaned and cut here because it comes from the client. It runs after
+             usageId and usageName are set and before the request is refused or sent on,
+             so refused requests are recorded too. -->
+        <set-variable name="usageModel" value="@{
+            var m = System.Text.RegularExpressions.Regex.Replace((string)context.Variables.GetValueOrDefault(&quot;requestModel&quot;, (string)context.Variables.GetValueOrDefault(&quot;deploymentName&quot;, &quot;&quot;)), &quot;[^A-Za-z0-9._@\\-]&quot;, &quot;_&quot;);
+            return m.Length &gt; 64 ? m.Substring(0, 64) : m;
+        }" />
+        <trace source="aifapim-usage" severity="information">
+            <message>usage</message>
+            <metadata name="RequestId" value="@(context.RequestId.ToString())" />
+            <metadata name="CallerType" value="@(context.Subscription == null ? (string)context.Variables.GetValueOrDefault(&quot;callerType&quot;, &quot;&quot;) : &quot;key&quot;)" />
+            <metadata name="CallerId" value="@((string)context.Variables.GetValueOrDefault(&quot;usageId&quot;, &quot;&quot;))" />
+            <metadata name="CallerName" value="@((string)context.Variables.GetValueOrDefault(&quot;usageName&quot;, &quot;&quot;))" />
+            <metadata name="Client" value="@((string)context.Variables.GetValueOrDefault(&quot;callerClient&quot;, &quot;&quot;))" />
+            <metadata name="Api" value="@(context.Api.Name)" />
+            <metadata name="Product" value="@(context.Product == null ? &quot;&quot; : context.Product.Id)" />
+            <metadata name="Model" value="@((string)context.Variables.GetValueOrDefault(&quot;usageModel&quot;, &quot;&quot;))" />
+        </trace>

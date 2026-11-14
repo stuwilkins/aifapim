@@ -120,8 +120,8 @@
                                     }
                                 }" namespace="__METRIC_NAMESPACE__">
                                     <dimension name="API ID" />
-                                    <dimension name="Subscription ID" />
-                                    <dimension name="Subscription Name" value="@(context.Subscription.Name)" />
+                                    <dimension name="Subscription ID" value="@((string)context.Variables.GetValueOrDefault(&quot;usageId&quot;, &quot;&quot;))" />
+                                    <dimension name="Subscription Name" value="@((string)context.Variables.GetValueOrDefault(&quot;usageName&quot;, &quot;&quot;))" />
                                     <dimension name="User ID" />
                                     <dimension name="Product ID" />
                                     <dimension name="Model" value="__CLAUDE_AUTO_CLASSIFIER__" />

@@ -7,6 +7,14 @@
               __ALLOWED_CLIENT_IPS__
         </ip-filter>
         <base />
+        <!-- Who is calling. A keyed request is named by its subscription. A keyless request
+             came through the open product (Product_EntraOpen_Policy.xml), whose policy has
+             validated the token and set callerId (the object id, which is also how personal
+             subscriptions are named) and callerName. The token limit counter, the metric
+             dimensions and the usage record read these two variables, never the
+             subscription directly: context.Subscription is null without a key. -->
+        <set-variable name="usageId" value="@(context.Subscription == null ? (string)context.Variables.GetValueOrDefault(&quot;callerId&quot;, &quot;&quot;) : context.Subscription.Id)" />
+        <set-variable name="usageName" value="@(context.Subscription == null ? (string)context.Variables.GetValueOrDefault(&quot;callerName&quot;, &quot;&quot;) : context.Subscription.Name)" />
         <!-- Extract the model name from the JSON request body. preserveContent=true
              keeps the body intact for the upstream call. Used as the Model dimension
              on the token metric below. -->
@@ -49,15 +57,15 @@
              Image requests are counted in outbound. -->
         <choose>
             <when condition="@(!context.Variables.GetValueOrDefault&lt;bool&gt;(&quot;isImageRequest&quot;, false))">
-        <llm-token-limit tokens-per-minute="10000000" counter-key="@(context.Subscription.Id)" estimate-prompt-tokens="true" tokens-consumed-header-name="consumed-tokens" remaining-tokens-header-name="remaining-tokens" />
+        <llm-token-limit tokens-per-minute="10000000" counter-key="@((string)context.Variables.GetValueOrDefault(&quot;usageId&quot;, &quot;&quot;))" estimate-prompt-tokens="true" tokens-consumed-header-name="consumed-tokens" remaining-tokens-header-name="remaining-tokens" />
         <!-- Emit token metrics under a custom namespace, parallel to the
              Anthropic policy. Captures the Model dimension explicitly so that
              per-model token accounting is reliable in App Insights regardless
              of LlmLog ModelName behavior. -->
         <llm-emit-token-metric namespace="__METRIC_NAMESPACE__">
             <dimension name="API ID" />
-            <dimension name="Subscription ID" />
-            <dimension name="Subscription Name" value="@(context.Subscription.Name)" />
+            <dimension name="Subscription ID" value="@((string)context.Variables.GetValueOrDefault(&quot;usageId&quot;, &quot;&quot;))" />
+            <dimension name="Subscription Name" value="@((string)context.Variables.GetValueOrDefault(&quot;usageName&quot;, &quot;&quot;))" />
             <dimension name="User ID" />
             <dimension name="Product ID" />
             <dimension name="Model" value="@((string)context.Variables.GetValueOrDefault(&quot;requestModel&quot;, &quot;&quot;))" />
@@ -98,8 +106,8 @@
                     }
                 }" namespace="__METRIC_NAMESPACE__">
                     <dimension name="API ID" />
-                    <dimension name="Subscription ID" />
-                    <dimension name="Subscription Name" value="@(context.Subscription.Name)" />
+                    <dimension name="Subscription ID" value="@((string)context.Variables.GetValueOrDefault(&quot;usageId&quot;, &quot;&quot;))" />
+                    <dimension name="Subscription Name" value="@((string)context.Variables.GetValueOrDefault(&quot;usageName&quot;, &quot;&quot;))" />
                     <dimension name="User ID" />
                     <dimension name="Product ID" />
                     <dimension name="Model" value="@((string)context.Variables.GetValueOrDefault(&quot;requestModel&quot;, &quot;&quot;))" />

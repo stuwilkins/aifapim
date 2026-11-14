@@ -159,7 +159,39 @@ param serviceProducts = [
       role: 'Inference.Invoke'                            // example, replace: an app role of that app
     }
   }
+  // The OPEN product: no subscription key, the Entra ID access token alone decides.
+  // People call with a delegated token that holds `scope`; service principals with
+  // an app-only token (certificate) that holds `role`. An API can be in only one
+  // open product, so there is at most one entry with open: true. With an incomplete
+  // entraAuth (tenantId, audience, role, scope and userRole are all needed) the product
+  // refuses every request instead of being open to anyone.
+  // clientApplicationIds (optional) limits which client apps may ask for a person's
+  // token. Keep the real IDs in the environment's own parameter file.
+  {
+    name: 'open'
+    displayName: 'Open (Entra token)'
+    description: 'No key: people and services call with a Microsoft Entra ID access token.'
+    open: true
+    entraAuth: {
+      tenantId: '00000000-0000-0000-0000-000000000000'    // example, replace
+      audience: '00000000-0000-0000-0000-000000000000'    // example, replace: client ID of the gateway API app
+      role: 'Inference.Invoke'                            // example, replace: an app role for services
+      scope: 'access_as_user'                             // example, replace: a delegated scope for people
+      userRole: 'Inference.User'                          // example, replace: an app role a person must hold
+      // clientApplicationIds: [
+      //   '00000000-0000-0000-0000-000000000000'
+      // ]
+    }
+  }
 ]
+
+// ---- Usage record (optional) ----
+// When true, every request to the five inference APIs writes one Application
+// Insights trace (AppTraces) naming the caller: the subscription id of a key, or
+// the object id of a token caller of the open product. Join it to
+// ApiManagementGatewayLlmLog on CorrelationId for tokens per caller. Turn it on
+// when you use an open product, which has no subscription to name the caller.
+param usageTrace = false
 
 // ---- Request body log (optional) ----
 // Off by default. When true, the gateway writes the raw body of every POST to

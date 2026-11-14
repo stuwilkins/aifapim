@@ -7,6 +7,14 @@
               __ALLOWED_CLIENT_IPS__
         </ip-filter>
         <base />
+        <!-- Who is calling. A keyed request is named by its subscription. A keyless request
+             came through the open product (Product_EntraOpen_Policy.xml), whose policy has
+             validated the token and set callerId (the object id, which is also how personal
+             subscriptions are named) and callerName. The token limit counter, the metric
+             dimensions and the usage record read these two variables, never the
+             subscription directly: context.Subscription is null without a key. -->
+        <set-variable name="usageId" value="@(context.Subscription == null ? (string)context.Variables.GetValueOrDefault(&quot;callerId&quot;, &quot;&quot;) : context.Subscription.Id)" />
+        <set-variable name="usageName" value="@(context.Subscription == null ? (string)context.Variables.GetValueOrDefault(&quot;callerName&quot;, &quot;&quot;) : context.Subscription.Name)" />
         <!-- A multipart body (image edits) is read once, into formFields: a JObject
              of lowercase field name to the list of its values (cut to 256
              characters), or null for any other body. The form is split on the
@@ -176,8 +184,8 @@
                     }
                 }" namespace="__METRIC_NAMESPACE__">
                     <dimension name="API ID" />
-                    <dimension name="Subscription ID" />
-                    <dimension name="Subscription Name" value="@(context.Subscription.Name)" />
+                    <dimension name="Subscription ID" value="@((string)context.Variables.GetValueOrDefault(&quot;usageId&quot;, &quot;&quot;))" />
+                    <dimension name="Subscription Name" value="@((string)context.Variables.GetValueOrDefault(&quot;usageName&quot;, &quot;&quot;))" />
                     <dimension name="User ID" />
                     <dimension name="Product ID" />
                     <dimension name="Model" value="@((string)context.Variables.GetValueOrDefault(&quot;requestModel&quot;, &quot;&quot;))" />

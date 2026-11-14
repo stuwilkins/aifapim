@@ -46,7 +46,7 @@
                     </set-header>
                     <set-header name="x-ms-meta-subscription" exists-action="override">
                         <value>@{
-                            var s = context.Subscription == null ? &quot;&quot; : (context.Subscription.Name ?? &quot;&quot;);
+                            var s = (string)context.Variables.GetValueOrDefault(&quot;usageName&quot;, &quot;&quot;) ?? &quot;&quot;;
                             s = System.Text.RegularExpressions.Regex.Replace(s, &quot;[^A-Za-z0-9._@\\-]&quot;, &quot;_&quot;);
                             return s.Length == 0 ? &quot;-&quot; : (s.Length &gt; 128 ? s.Substring(0, 128) : s);
                         }</value>

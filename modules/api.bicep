@@ -111,7 +111,7 @@ param catalogProductDisplayName string
 @description('Description for the catalog product.')
 param catalogProductDescription string
 
-@description('Service products, each { name, displayName, description, policyXml }. policyXml is a product-level policy, or empty for none.')
+@description('Service products, each { name, displayName, description, policyXml, open }. policyXml is a product-level policy, or empty for none. An open product (open: true) needs no subscription key: its policy is then the only access check, so it is never empty.')
 param serviceProducts array = []
 
 // Request headers copied into Application Insights (AppRequests, as
@@ -778,8 +778,8 @@ resource serviceProduct 'Microsoft.ApiManagement/service/products@2023-03-01-pre
   properties: {
     displayName: p.displayName
     description: p.description
-    subscriptionRequired: true
-    approvalRequired: true
+    subscriptionRequired: !(p.?open ?? false)
+    approvalRequired: !(p.?open ?? false)
     state: 'published'
   }
 }]

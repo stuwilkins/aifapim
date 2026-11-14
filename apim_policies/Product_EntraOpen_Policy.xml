@@ -1,0 +1,132 @@
+<policies>
+    <inbound>
+        <base />
+        <!-- Product policy for the OPEN product: callers need no subscription key, only
+             a Microsoft Entra ID access token. aifapim.bicep builds it from the entraAuth
+             and open settings of the product: the ip-filter block (only when the product
+             has allowedClientIps), the tenant, the audience (the client ID of the gateway
+             API app, as a v2 token carries it), the app role for services, the delegated
+             scope and the user app role for people and, optionally, the client apps allowed to ask for a person's
+             token. It runs where an API policy calls <base />, which every API policy
+             here does.
+             Because there is no key, THIS POLICY IS THE ONLY ACCESS CHECK for a keyless
+             request: without it the product would be anonymous. aifapim.bicep therefore
+             renders a deny-all policy instead when the product is open but has no
+             complete entraAuth, and never the inheritance-only policy.
+             Two kinds of caller are accepted:
+             - a service principal: an app-only token (idtyp app) obtained with a
+               certificate (azpacr 2) that holds the app role, as in
+               Product_EntraAuth_Policy.xml;
+             - a person: a delegated token that holds the scope in its scp claim and the
+               user app role in its roles claim (assigned to the person or to a group of
+               theirs in Entra ID). An app token has no scp claim, so it cannot pass as a
+               person.
+             The branch is chosen from the token's own idtyp claim before it is validated.
+             That is safe: each branch validates the signature, the tenant and the
+             audience, and a token that names the wrong branch fails its claims.
+             After validation the caller is named by the oid claim (the object id of the
+             person or the service principal), which is also how personal subscriptions
+             are named (see aifapim-key-issuance in the docs repository). The API policies
+             read callerId, callerName and callerType to name the caller where they used
+             to read the subscription. A request with a valid key never reaches this
+             policy: it is handled in its own product. A key that is not valid is ignored
+             by APIM, and the request comes here. -->
+        __PRODUCT_IP_FILTER__
+        <set-variable name="callerIsApp" value="@{
+            var h = context.Request.Headers.GetValueOrDefault(&quot;Authorization&quot;, &quot;&quot;);
+            if (!h.StartsWith(&quot;Bearer &quot;, StringComparison.OrdinalIgnoreCase)) { return false; }
+            var jwt = h.Substring(7).Trim().AsJwt();
+            return jwt != null &amp;&amp; jwt.Claims.GetValueOrDefault(&quot;idtyp&quot;, &quot;&quot;) == &quot;app&quot;;
+        }" />
+        <choose>
+            <when condition="@(context.Variables.GetValueOrDefault&lt;bool&gt;(&quot;callerIsApp&quot;, false))">
+                <validate-azure-ad-token tenant-id="__ENTRA_TENANT_ID__" output-token-variable-name="callerJwt" failed-validation-httpcode="401" failed-validation-error-message="A valid Microsoft Entra ID access token (Authorization: Bearer) for this gateway is required.">
+                    <audiences>
+                        <audience>__ENTRA_AUDIENCE__</audience>
+                    </audiences>
+                    <required-claims>
+                        <claim name="roles">
+                            <value>__ENTRA_ROLE__</value>
+                        </claim>
+                        <claim name="idtyp">
+                            <value>app</value>
+                        </claim>
+                        <claim name="azpacr">
+                            <value>2</value>
+                        </claim>
+                    </required-claims>
+                </validate-azure-ad-token>
+            </when>
+            <otherwise>
+                <validate-azure-ad-token tenant-id="__ENTRA_TENANT_ID__" output-token-variable-name="callerJwt" failed-validation-httpcode="401" failed-validation-error-message="A valid Microsoft Entra ID access token (Authorization: Bearer) for this gateway is required.">
+                    __ENTRA_CLIENT_APPS__
+                    <audiences>
+                        <audience>__ENTRA_AUDIENCE__</audience>
+                    </audiences>
+                    <required-claims>
+                        <claim name="scp" match="any" separator=" ">
+                            <value>__ENTRA_SCOPE__</value>
+                        </claim>
+                        <claim name="roles">
+                            <value>__ENTRA_USER_ROLE__</value>
+                        </claim>
+                    </required-claims>
+                </validate-azure-ad-token>
+            </otherwise>
+        </choose>
+        <!-- Who called. Everything below is read from the validated token. The object id
+             must look like a GUID, or the request is refused, so a caller always has a
+             usable identity in the limit counter, the metrics and the usage record. -->
+        <set-variable name="callerId" value="@{
+            var j = (Jwt)context.Variables[&quot;callerJwt&quot;];
+            var oid = j.Claims.GetValueOrDefault(&quot;oid&quot;, &quot;&quot;);
+            return System.Text.RegularExpressions.Regex.IsMatch(oid, &quot;^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$&quot;) ? oid.ToLowerInvariant() : &quot;&quot;;
+        }" />
+        <choose>
+            <when condition="@(((string)context.Variables.GetValueOrDefault(&quot;callerId&quot;, &quot;&quot;)).Length == 0)">
+                <return-response>
+                    <set-status code="401" reason="Unauthorized" />
+                    <set-header name="Content-Type" exists-action="override">
+                        <value>application/json</value>
+                    </set-header>
+                    <set-body>{"error":{"code":"Unauthorized","message":"The access token has no usable caller identity."}}</set-body>
+                </return-response>
+            </when>
+        </choose>
+        <set-variable name="callerType" value="@(context.Variables.GetValueOrDefault&lt;bool&gt;(&quot;callerIsApp&quot;, false) ? &quot;app&quot; : &quot;user&quot;)" />
+        <!-- The client app that asked for the token (azp, or appid in a v1 token). -->
+        <set-variable name="callerClient" value="@{
+            var j = (Jwt)context.Variables[&quot;callerJwt&quot;];
+            var c = j.Claims.GetValueOrDefault(&quot;azp&quot;, j.Claims.GetValueOrDefault(&quot;appid&quot;, &quot;&quot;));
+            c = System.Text.RegularExpressions.Regex.Replace(c, &quot;[^A-Za-z0-9._@\\-]&quot;, &quot;_&quot;);
+            return c.Length &gt; 64 ? c.Substring(0, 64) : c;
+        }" />
+        <!-- A readable name for the metrics: the display name of a person, or the client
+             app of a service principal. Control characters are replaced and the length is
+             cut, so a name cannot add lines or bulk to a log or a metric dimension. It is
+             never used to decide access. -->
+        <set-variable name="callerName" value="@{
+            var j = (Jwt)context.Variables[&quot;callerJwt&quot;];
+            var isApp = context.Variables.GetValueOrDefault&lt;bool&gt;(&quot;callerIsApp&quot;, false);
+            var n = isApp
+                ? &quot;app:&quot; + (string)context.Variables.GetValueOrDefault(&quot;callerClient&quot;, &quot;&quot;)
+                : j.Claims.GetValueOrDefault(&quot;name&quot;, j.Claims.GetValueOrDefault(&quot;preferred_username&quot;, &quot;&quot;));
+            n = System.Text.RegularExpressions.Regex.Replace(n ?? &quot;&quot;, &quot;\\p{C}&quot;, &quot;_&quot;);
+            if (n.Length == 0) { return (string)context.Variables.GetValueOrDefault(&quot;callerId&quot;, &quot;&quot;); }
+            return n.Length &gt; 100 ? n.Substring(0, 100) : n;
+        }" />
+        <!-- The caller's token is for this gateway only. Drop it so it is never sent on
+             to the backend; authentication-managed-identity in the API policy adds the
+             gateway's own token. -->
+        <set-header name="Authorization" exists-action="delete" />
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

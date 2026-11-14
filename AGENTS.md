@@ -244,6 +244,7 @@ Fetch the keys with
   | `nsls2aifapim-services-external` | NSLS-II AIF APIM Services (external) | 5 inference + `catalog-api` | services (`svc-...`) | none |
   | `nsls2aifapim-services-internal` | NSLS-II AIF APIM Services (internal) | 5 inference + `catalog-api` | on-site services | `ip-filter`: the NSLS-II NAT pool `130.199.137.0/28` |
   | `aifapim-catalog` | NSLS-II AIF APIM Services (catalog poller) | `catalog-api` | `svc-catalog-poller` | none |
+  | the `open: true` entry of `serviceProducts` (at most one) | set in the parameter file | 5 inference + `catalog-api` | none: callers send an Entra token, no key | `Product_EntraOpen_Policy.xml`: the only access check |
 
   The service products come from the `serviceProducts` parameter (each
   `{ name, displayName, description, allowedClientIps?, entraAuth? }`), written
@@ -262,6 +263,68 @@ Fetch the keys with
     Entra ID. **This repository is public**: the tenant, audience and role go in
     the environment's own parameter file, never here (the example file has
     placeholders). Products without `entraAuth` render exactly as before.
+  - **The open product (`open: true`) needs no key.** It is the one product that
+    keyless callers reach, per the APIM subscription documentation: a request
+    with no key, or a key that is not valid, is handled in the (single) open
+    product that holds the API; a request with a valid key is handled in the
+    key's own product. The APIs still have `subscriptionRequired: true`. The
+    product has `subscriptionRequired: false` and `approvalRequired: false`.
+    - **Its policy is the only access check.** `Product_EntraOpen_Policy.xml`
+      is rendered only when `entraAuth` has `tenantId`, `audience`, `role`,
+      `scope` and `userRole`; otherwise the product gets a policy that
+      answers 503, never the inheritance-only one (that would be anonymous
+      access). An API can be in
+      only one open product, so there is at most one; APIM's own refusal of a
+      second one is not verified.
+    - **Two callers, two validations.** The policy reads `idtyp` from the token
+      before it is validated, only to pick a branch: `app` goes to the service
+      principal checks (audience, `roles`, `idtyp` `app`, `azpacr` `2`, as in
+      `Product_EntraAuth_Policy.xml`), anything else to the person checks
+      (audience, `scp` holds `scope`, `roles` holds `userRole`, and
+      `client-application-ids` when `clientApplicationIds` is set). Each
+      branch validates signature, tenant and audience, so naming the wrong
+      branch only fails the stricter check.
+    - **The caller is the token's `oid`**, which must look like a GUID or the
+      request is refused with 401. The policy sets `callerId`, `callerName`
+      (the `name` claim, or `app:<azp>`), `callerType` and `callerClient`, and
+      deletes `Authorization`. The five inference policies turn these into
+      `usageId` and `usageName` after their first `<base />`:
+      `context.Subscription == null ? caller : subscription`. **Nothing may read
+      `context.Subscription.Id` or `.Name` outside those two variables**: it is
+      null for a keyless request and the expression would throw. The test
+      `tests/policy/caller-policy-test.ps1` fails when one does.
+      `Subscription Name` is the subscription's display name, `Subscription ID`
+      its id (the object id for a person); the keyless values are the token's
+      `name` and `oid`, so a person is one series either way.
+    - **Usage trace.** With `usageTrace = true` the five inference policies write
+      an Application Insights trace (source `aifapim-usage`) through the
+      `<!-- __REQUEST_LOG__ -->` marker, which `aifapim.bicep` replaces with the
+      usage trace block, then the request body log block. `Properties` hold
+      `RequestId` (= `CorrelationId`), `CallerType` (`key`, `user` or `app`),
+      `CallerId`, `CallerName`, `Client`, `Api`, `Product` and `Model`. The
+      gateway log has no caller for a keyless request, so this is the record. The
+      custom metrics cap each dimension at 100 unique values and each namespace
+      at 1,000 time series (extra values are dropped silently), so they are not
+      a record of who used what.
+    - **Entra side (not in this repository: the `bicep` repository,
+      `entra/n2c.bicep`, module `aifapim`).** The gateway API app (N2SN AI
+      Gateway, shared by dev and prod) has a delegated scope
+      (`entraAuth.scope`, `access_as_user`) and a user app role
+      (`entraAuth.userRole`, `Inference.User`) besides the `Inference.Invoke`
+      role for services, and `requestedAccessTokenVersion` 2 (the audience is
+      the client ID). The NSLS2 N2C client is pre-authorized for the scope, the
+      role is assigned to groups, and "Assignment required" is on. Keep the
+      real IDs in the environment's parameter file: this repository is public.
+    - **Not verified until the first dev run:** that `context.Subscription` is
+      null (not an error) in a keyless request; that APIM accepts an invalid key
+      in a keyless request and falls through to the open product; that
+      `trace` records land in `AppTraces` with `context.RequestId` equal to
+      `CorrelationId`; that `<set-header name="Authorization" exists-action=
+      "delete">` leaves nothing for the backend; whether creating the product
+      also creates an Administrator key (check `ownerId` `/users/1`).
+    - Check expressions with `pwsh -NoProfile -File
+      tests/policy/caller-policy-test.ps1` (fake context, unsigned tokens; it
+      does not run `validate-azure-ad-token`).
   - **The internal lock sees the caller the gateway sees.** Clients that reach
     `hermes.nsls2.bnl.gov` pass through a Signal Sciences WAF and arrive from
     its AWS addresses, so an internal key only works when the caller is on
