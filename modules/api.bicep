@@ -779,7 +779,8 @@ resource serviceProduct 'Microsoft.ApiManagement/service/products@2023-03-01-pre
     displayName: p.displayName
     description: p.description
     subscriptionRequired: !(p.?open ?? false)
-    approvalRequired: !(p.?open ?? false)
+    // APIM refuses any value for approvalRequired (even false) when no subscription is required.
+    ...((p.?open ?? false) ? {} : { approvalRequired: true })
     state: 'published'
   }
 }]

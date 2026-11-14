@@ -268,7 +268,9 @@ Fetch the keys with
     with no key, or a key that is not valid, is handled in the (single) open
     product that holds the API; a request with a valid key is handled in the
     key's own product. The APIs still have `subscriptionRequired: true`. The
-    product has `subscriptionRequired: false` and `approvalRequired: false`.
+    product has `subscriptionRequired: false` and sends no
+    `approvalRequired` at all: APIM refuses any value for it, even `false`, when
+    no subscription is required (found on the first dev deploy).
     - **Its policy is the only access check.** `Product_EntraOpen_Policy.xml`
       is rendered only when `entraAuth` has `tenantId`, `audience`, `role`,
       `scope` and `userRole`; otherwise the product gets a policy that
